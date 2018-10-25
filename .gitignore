@@ -19,8 +19,8 @@ SquadGoals/*.dll
 [Dd]ebugPublic/
 [Rr]elease/
 [Rr]eleases/
-x64/
-x86/
+SquadGoals/x64/
+SquadGoals/x86/
 bld/
 [Bb]in/
 [Oo]bj/
