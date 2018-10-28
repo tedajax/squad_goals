@@ -1,16 +1,25 @@
 #pragma once
 
 #include "types.h"
-
 #include <limits>
 
 class vec2 {
 public:
+    vec2() : x(0), y(0) { }
+    vec2(const vec2& other) : x(other.x), y(other.y) {}
+    vec2(vec2&& other) : x(other.x), y(other.y) {}
     vec2(f32 x, f32 y) : x(x), y(y) { }
 
     inline vec2 operator=(const vec2& other) {
         x = other.x;
         y = other.y;
+        return *this;
+    }
+
+    inline vec2 operator=(vec2&& other) {
+        x = other.x;
+        y = other.y;
+        return *this;
     }
 
     inline vec2& operator+=(const vec2& other) {
@@ -45,6 +54,16 @@ public:
         return x * x + y * y;
     }
 
+    void decompose(vec2& direction, f32& magnitude) {
+        magnitude = len();
+        if (magnitude > 0) {
+            direction = vec2(x / magnitude, y / magnitude);
+        }
+        else {
+            direction = vec2::ZERO;
+        }
+    }
+
     void normalize() {
         f32 l = len();
         if (l > 0) {
@@ -60,6 +79,15 @@ public:
         }
         else {
             return ZERO;
+        }
+    }
+
+    void limit(f32 mag) {
+        f32 l = len();
+        if (l > mag) {
+            f32 s = (mag / l);
+            x *= s;
+            y *= s;
         }
     }
 
