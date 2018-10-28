@@ -9,6 +9,7 @@ public:
     vec2(const vec2& other) : x(other.x), y(other.y) {}
     vec2(vec2&& other) : x(other.x), y(other.y) {}
     vec2(f32 x, f32 y) : x(x), y(y) { }
+    vec2(int x, int y) : x((f32)x), y((f32)y) { }
 
     inline vec2 operator=(const vec2& other) {
         x = other.x;
@@ -82,6 +83,10 @@ public:
         }
     }
 
+    static vec2 perpendicular(const vec2& v) {
+        return vec2(-v.y, v.x);
+    }
+
     void limit(f32 mag) {
         f32 l = len();
         if (l > mag) {
@@ -98,11 +103,6 @@ public:
 
     f32 x, y;
 };
-
-vec2 vec2::ZERO(0, 0);
-vec2 vec2::ONE(1, 1);
-vec2 vec2::RIGHT(1, 0);
-vec2 vec2::UP(0, -1);
 
 inline bool operator==(const vec2& lhs, const vec2& rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
@@ -330,6 +330,17 @@ namespace math {
         t = clamp01(t);
         t = -2.f * t * t * t + 3.f * t * t;
         return to * t + from * (1.f - t);
+    }
+
+    inline f32 fade(f32 t) {
+        return t * t * t * (t * (t * 6 - 15) + 10);
+    }
+
+    inline f32 grad(int hash, f32 x, f32 y, f32 z) {
+        int h = hash & 15;
+        f32 u = (h < 8) ? x : y;
+        f32 v = (h < 4) ? y : h == 12 || h == 14 ? x : z;
+        return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
     }
 
     inline f32 smooth_damp(f32 from, f32 to, f32& velocity, f32 time, f32 maxSpeed = std::numeric_limits<f32>::infinity(), f32 dt = 1.f / 60.f) {

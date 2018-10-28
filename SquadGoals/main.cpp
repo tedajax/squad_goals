@@ -10,6 +10,8 @@
 #include <effolkronium/random.hpp>
 
 #include "algebra.h"
+#include "perlin.h"
+#include "flowfield.h"
 
 struct agent {
     vec2 position = vec2::ZERO;
@@ -20,36 +22,29 @@ struct agent {
     vec2 target = vec2::ZERO;
 
     vec2 future;
-    f32 futureAngle;
+    f32 wanderAngle;
+    f32 wanderTimer = 0.f;
 
     f32 maxSpeed = 200.f;
     f32 maxAccel = 150.f;
     f32 projectionDist = 100.f;
     f32 projectionRadius = 35.f;
-    f32 wanderMult = 2.f;
+    f32 wanderMult = 10.f;
+    f32 wanderInterval = 1 / 60.f;
 };
 
 using Random = effolkronium::random_static;
 
 void render_circle(SDL_Renderer* renderer, int cx, int cy, int radius);
+void render_direction(SDL_Renderer* renderer, vec2 center, vec2 direction, f32 length);
 
 int main(int argc, char* argv[]) {
-    TTF_Font* debugFont = TTF_OpenFont("assets/prstartk.ttf", 16);
-
-    std::vector<agent> agents;
-
-    for (int i = 0; i < 25; ++i) {
-        agent ag;
-        ag.position.x = (f32)Random::get(0, 1280);
-        ag.position.y = (f32)Random::get(0, 720);
-        ag.target.x = (f32)Random::get(0, 1280);
-        ag.target.y = (f32)Random::get(0, 720);
-        ag.futureAngle = Random::get(0.f, 360.f);
-        agents.push_back(ag);
-    }
-
+    Random::seed(1);
 
     SDL_Init(SDL_INIT_VIDEO);
+    TTF_Init();
+
+    TTF_Font* debugFont = TTF_OpenFont("assets/prstartk.ttf", 16);
 
     SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
@@ -57,12 +52,30 @@ int main(int argc, char* argv[]) {
     SDL_Surface* dudeSurface = IMG_Load("assets/dude.png");
     SDL_Texture* dudeTexture = SDL_CreateTextureFromSurface(renderer, dudeSurface);
 
+    std::vector<agent> agents;
+    flow_field flowField(1280.f, 720.f, 32.f);
+
+    perlin_gen perlin(6);
+    flowField.perlin_angles(perlin, 0.f);
+
+    for (int i = 0; i < 25; ++i) {
+        agent ag;
+        ag.position.x = (f32)Random::get(0, 1280);
+        ag.position.y = (f32)Random::get(0, 720);
+        ag.target.x = (f32)Random::get(0, 1280);
+        ag.target.y = (f32)Random::get(0, 720);
+        ag.wanderAngle = Random::get(0.f, 360.f);
+        agents.push_back(ag);
+    }
+
     int fps = 0;
     u64 ticks = SDL_GetPerformanceCounter();
     u64 lastTicks = ticks;
     u64 frameTicks = 0;
     int framesInSecond = 0;
     f32 dt = 0.f;
+
+    f32 a = 0.f;
 
     bool isRunning = true;
     while (isRunning) {
@@ -97,11 +110,15 @@ int main(int argc, char* argv[]) {
                 frameTicks -= 1000000000;
                 fps = framesInSecond;
                 framesInSecond = 0;
+                std::cout << "FPS: " << fps << std::endl;
             }
         }
 
         // UPDATE
         {
+            a += 1.f * dt;
+            flowField.perlin_angles(perlin, math::ping_pong(a, 100.f));
+
             int mx, my;
             SDL_GetMouseState(&mx, &my);
 
@@ -115,13 +132,19 @@ int main(int argc, char* argv[]) {
                     }
 
                     agent.future = agent.position + vec2::normalize(velocity) * agent.projectionDist;
-                    agent.futureAngle += Random::get<f32>(-agent.wanderMult, agent.wanderMult);
-                    agent.target.x = agent.future.x + math::cos(agent.futureAngle) * agent.projectionRadius;
-                    agent.target.y = agent.future.y + math::sin(agent.futureAngle) * agent.projectionRadius;
+
+                    agent.wanderTimer -= dt;
+                    if (agent.wanderTimer <= 0) {
+                        agent.wanderAngle += Random::get<f32>(-agent.wanderMult, agent.wanderMult);
+                        agent.wanderTimer += agent.wanderInterval;
+                    }
+
+                    agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agent.projectionRadius;
+                    agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agent.projectionRadius;
                 }();
 
                 // SEEK
-                [&agent, dt] {
+                [&agent, &flowField, dt] {
                     vec2 targetDir;
                     f32 targetDist;
 
@@ -130,7 +153,6 @@ int main(int argc, char* argv[]) {
                     targetDelta.decompose(targetDir, targetDist);
 
                     vec2 desired;
-
                     const f32 BORDER_SIZE = 128.f;
 
                     if (agent.position.x < BORDER_SIZE) {
@@ -146,7 +168,10 @@ int main(int argc, char* argv[]) {
                         desired = vec2(agent.velocity.x, -agent.maxSpeed);
                     }
                     else {
-                        desired = targetDir * math::clamp01(targetDist / 100) * agent.maxSpeed;
+                        vec2 wander = targetDir * math::clamp01(targetDist / 100) * agent.maxSpeed;
+                        vec2 flow = flowField.get(agent.position.x, agent.position.y) * agent.maxSpeed;
+                        desired = (wander + flow) / 2.f;
+                        //desired = flow;
                     }
 
                     vec2 steer = desired - agent.velocity;
@@ -172,23 +197,31 @@ int main(int argc, char* argv[]) {
             SDL_RenderClear(renderer);
 
             SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+
+            for (int x = 0; x < flowField.width(); ++x) {
+                for (int y = 0; y < flowField.height(); ++y) {
+                    vec2 v = flowField.get(x, y);
+                    render_direction(renderer, flowField.cell_center(x, y), v, flowField.cell_size());
+                }
+            }
+
             for (const auto& agent : agents) {
                 SDL_Rect rect = {
                     (int)agent.position.x - 16, (int)agent.position.y - 16,
                     32, 32
                 };
 
-                SDL_SetRenderDrawColor(renderer, 0, 0, 255, 255);
+                SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
                 SDL_RenderDrawLine(renderer, (int)agent.position.x, (int)agent.position.y, (int)agent.future.x, (int)agent.future.y);
-                SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+                SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
                 SDL_RenderDrawLine(renderer, (int)agent.future.x, (int)agent.future.y, (int)agent.target.x, (int)agent.target.y);
-                
                 render_circle(renderer, (int)agent.future.x, (int)agent.future.y, (int)agent.projectionRadius);
 
                 SDL_RenderCopyEx(renderer, dudeTexture, nullptr, &rect, agent.rotation, nullptr, SDL_FLIP_NONE);
             }
 
             // render FPS
+            if (false)
             {
                 char buffer[16] = { 0 };
                 snprintf(buffer, 16, "FPS: %d", fps);
@@ -243,4 +276,14 @@ void render_circle(SDL_Renderer* renderer, int cx, int cy, int radius) {
             err += dx - (radius << 1);
         }
     }
+}
+
+void render_direction(SDL_Renderer* renderer, vec2 center, vec2 direction, f32 length)
+{
+    vec2 p0 = center - direction * (length / 2);
+    vec2 p1 = center + direction * (length / 2);
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+    SDL_RenderDrawLine(renderer, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y);
+    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
+    SDL_RenderDrawPoint(renderer, (int)p1.x, (int)p1.y);
 }
