@@ -151,6 +151,31 @@ public:
         return v;
     }
 
+    // if v is on segment between a-b then return v, otherwise return other
+    static vec2 on_segment_or_other(const vec2& v, const vec2& a, const vec2& b, const vec2& other) {
+        // special rules for vertical line
+        if (a.x - b.x == 0) {
+            vec2 t = top(a, b), b = bottom(a, b);
+            if (v.y < t.y) {
+                return other;
+            }
+            else if (v.y > b.y) {
+                return other;
+            }
+        }
+        else {
+            vec2 l = left(a, b), r = right(a, b);
+            if (v.x < l.x) {
+                return other;
+            }
+            else if (v.x > r.x) {
+                return other;
+            }
+        }
+
+        return v;
+    }
+
     static f32 angle_between(const vec2& a, const vec2& b);
 
     void limit(f32 mag) {

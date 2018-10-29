@@ -16,6 +16,7 @@
 #include "flowfield.h"
 #include "box2dSdlDebugDraw.h"
 #include "path.h"
+#include "input_state.h"
 
 struct agent {
     vec2 position = vec2::ZERO;
@@ -29,8 +30,8 @@ struct agent {
     f32 wanderAngle;
     f32 wanderTimer = 0.f;
 
-    f32 maxSpeed = 30.f;
-    f32 maxAccel = 15.f;
+    f32 maxSpeed = 10.f;
+    f32 maxAccel = 5.f;
     f32 projectionDist = 4.f;
     f32 projectionRadius = 0.1f;
     f32 wanderMult = 10.f;
@@ -67,6 +68,7 @@ void screen_to_world(int sx, int sy, f32& wx, f32& wy);
 
 int main(int argc, char* argv[]) {
     Random::seed(1);
+    input_state input;
 
     SDL_Init(SDL_INIT_VIDEO);
     TTF_Init();
@@ -76,7 +78,7 @@ int main(int argc, char* argv[]) {
     SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
     SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
 
-    path agentPath(2.5f, { vec2(-8, -8), vec2(0, -10), vec2(8, -8), vec2(10, 0), vec2(8, 8), vec2(0, 10), vec2(-8, 8), vec2(-10, 0) });
+    path agentPath(path_dir::kCW, 2.5f, { vec2(-10, -8), vec2(0, -7), vec2(10, -8), vec2(14, 0), vec2(10, 8), vec2(0, 7), vec2(-10, 8), vec2(-14, 0) });
 
     b2World world(vec2::ZERO);
 
@@ -90,12 +92,14 @@ int main(int argc, char* argv[]) {
     SDL_Texture* dudeTexture = SDL_CreateTextureFromSurface(renderer, dudeSurface);
 
     std::vector<agent> agents;
-    flow_field flowField(1280.f, 720.f, 32.f);
+    flow_field flowField(40.f, 36.f, 1.f, -20.f, -18.f);
 
     perlin_gen perlin(10000);
     flowField.perlin_angles(perlin, 1.f);
 
-    for (int i = 0; i < 100; ++i) {
+    const int AGENT_COUNT = 100;
+
+    for (int i = 0; i < AGENT_COUNT; ++i) {
         agent ag;
         ag.position.x = (f32)Random::get(-20, 20);
         ag.position.y = (f32)Random::get(-11, 11);
@@ -130,6 +134,8 @@ int main(int argc, char* argv[]) {
             }
         }
 
+        input.update();
+
         int mx, my;
         SDL_GetMouseState(&mx, &my);
 
@@ -158,16 +164,39 @@ int main(int argc, char* argv[]) {
 
         // UPDATE
         {
+            {
+                auto agent = agents[0];
+                vec2 pos = agent.body->GetPosition();
+                f32 rot = agent.body->GetAngle();
+
+                if (input.get_key(SDL_SCANCODE_LEFT)) {
+                    pos.x -= 10.f * dt;
+                }
+
+                if (input.get_key(SDL_SCANCODE_RIGHT)) {
+                    pos.x += 10.f * dt;
+                }
+
+                if (input.get_key(SDL_SCANCODE_UP)) {
+                    pos.y -= 10.f * dt;
+                }
+
+                if (input.get_key(SDL_SCANCODE_DOWN)) {
+                    pos.y += 10.f * dt;
+                }
+
+                agents[0].body->SetTransform(pos, rot);
+            }
+
             a += 0.1f * dt;
             flowField.perlin_angles(perlin, 1.f + math::ping_pong(a, 3.f), math::ping_pong(a, 100.f));
-
-           
+          
 
             for (auto& agent : agents) {
                 agent.position = agent.body->GetPosition();
                 agent.velocity = agent.body->GetLinearVelocity();
 
-                // WANDER
+                // TARGET
                 [&agent, &agentPath, dt] {
                     vec2 velocity = agent.velocity;
 
@@ -209,7 +238,7 @@ int main(int argc, char* argv[]) {
 
                         vec2 delta = agent.position - other.position;
                         f32 d = delta.len();
-                        if (d > 0 && d < 1.25f) {
+                        if (d > 0 && d < 2.f) {
                             sum += vec2::normalize(delta) / d;
                             ++count;
                         }
@@ -238,30 +267,34 @@ int main(int argc, char* argv[]) {
                     vec2 desired;
                     const f32 BORDER_SIZE = 128.f;
 
-                    if (agent.position.x < -20) {
-                        desired = vec2(agent.maxSpeed, agent.velocity.y);
-                    }
-                    else if (agent.position.x > 20) {
-                        desired = vec2(-agent.maxSpeed, agent.velocity.y);
-                    }
-                    else if (agent.position.y < -12) {
-                        desired = vec2(agent.velocity.x, agent.maxSpeed);
-                    }
-                    else if (agent.position.y > 12) {
-                        desired = vec2(agent.velocity.x, -agent.maxSpeed);
-                    }
-                    else {
-                        //vec2 wander = targetDir * math::clamp01(targetDist / 100) * agent.maxSpeed;
-                        //vec2 flow = flowField.get(agent.position.x, agent.position.y) * agent.maxSpeed;
-                        //desired = flow + separation;
-                        //desired = flow;
-                        //desired = wander + separation;
+                    //if (agent.position.x < -20) {
+                    //    desired = vec2(agent.maxSpeed, agent.velocity.y);
+                    //}
+                    //else if (agent.position.x > 20) {
+                    //    desired = vec2(-agent.maxSpeed, agent.velocity.y);
+                    //}
+                    //else if (agent.position.y < -12) {
+                    //    desired = vec2(agent.velocity.x, agent.maxSpeed);
+                    //}
+                    //else if (agent.position.y > 12) {
+                    //    desired = vec2(agent.velocity.x, -agent.maxSpeed);
+                    //}
+                    //else {
+                    //}
 
-                        vec2 wander = targetDir * math::clamp01(targetDist / 40) * agent.maxSpeed;
-                        desired = wander;
-                    }
+                    //vec2 wander = targetDir * math::clamp01(targetDist / 100) * agent.maxSpeed;
+                    vec2 flow = flowField.get(agent.position);
+                    //desired = flow + separation;
+                    //desired = flow;
+                    //desired = wander + separation;
 
-                    desired += separation / 8;
+                    vec2 movement = targetDir * math::clamp01(targetDist / 40);
+
+                    desired = flow + movement;
+
+                    desired = 1.f * movement + 0.01f * flow + 0.01f * separation;
+                    desired.normalize();
+                    desired *= agent.maxSpeed;
 
                     vec2 steer = desired - agent.velocity;
                     steer.limit(agent.maxAccel);
@@ -286,13 +319,15 @@ int main(int argc, char* argv[]) {
 
             SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 
-            /*for (int x = 0; x < flowField.width(); ++x) {
+            // debug flow field
+            for (int x = 0; x < flowField.width(); ++x) {
                 for (int y = 0; y < flowField.height(); ++y) {
                     vec2 v = flowField.get(x, y);
                     render_direction(renderer, flowField.cell_center(x, y), v, flowField.cell_size());
                 }
-            }*/
+            }
 
+            // debug path
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             for (int i = 0; i < agentPath.path_points().size(); ++i) {
                 vec2 pt1 = agentPath.path_points()[i];
@@ -335,7 +370,7 @@ int main(int argc, char* argv[]) {
 
             // render FPS
             {
-                char buffer[16] = { 0 };
+                char buffer[256] = { 0 };
                 snprintf(buffer, 16, "FPS: %d", fps);
                 SDL_Color white = { 255, 255, 255, 255 };
                 SDL_Surface* fpsTextSurface = TTF_RenderText_Solid(debugFont, buffer, white);
@@ -394,10 +429,15 @@ void render_direction(SDL_Renderer* renderer, vec2 center, vec2 direction, f32 l
 {
     vec2 p0 = center - direction * (length / 2);
     vec2 p1 = center + direction * (length / 2);
+
+    int x0, y0, x1, y1;
+    world_to_screen(p0.x, p0.y, x0, y0);
+    world_to_screen(p1.x, p1.y, x1, y1);
+
     SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_RenderDrawLine(renderer, (int)p0.x, (int)p0.y, (int)p1.x, (int)p1.y);
+    SDL_RenderDrawLine(renderer, x0, y0, x1, y1);
     SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
-    SDL_RenderDrawPoint(renderer, (int)p1.x, (int)p1.y);
+    SDL_RenderDrawPoint(renderer, x1, y1);
 }
 
 void world_to_screen(f32 wx, f32 wy, int& sx, int& sy) {

@@ -1,11 +1,13 @@
 #include "flowfield.h"
 
-flow_field::flow_field(f32 worldWidth, f32 worldHeight, f32 cellSize)
+flow_field::flow_field(f32 worldWidth, f32 worldHeight, f32 cellSize, f32 offsetX, f32 offsetY)
     : worldWidth(worldWidth),
     worldHeight(worldHeight),
     cellSize(cellSize),
     cellWidth(math::ceil_int(worldWidth / cellSize)),
-    cellHeight(math::ceil_int(worldHeight / cellSize))
+    cellHeight(math::ceil_int(worldHeight / cellSize)),
+    offsetX(offsetX),
+    offsetY(offsetY)
 {
     vectors.resize(cellWidth * cellHeight);
 }
@@ -34,15 +36,18 @@ vec2 flow_field::get(int cx, int cy) const {
     return vec2::ZERO;
 }
 
-vec2 flow_field::get(f32 x, f32 y) const {
-    if (x < 0 || x > worldWidth || y < 0 || y > worldHeight) {
+vec2 flow_field::get(vec2 pos) const {
+    int cx, cy;
+    if (world_to_cell(pos, cx, cy)) {
+        return vectors[index(cx, cy)];
+    }
+    else {
         return vec2::ZERO;
     }
-    return vectors[index((int)(x / cellSize), (int)(y / cellSize))];
 }
 
 vec2 flow_field::cell_center(int cx, int cy) {
-    return vec2(cx * cellSize + cellSize / 2, cy * cellSize + cellSize / 2);
+    return vec2(cx * cellSize + cellSize / 2 - worldWidth / 2, cy * cellSize + cellSize / 2 - worldHeight / 2);
 }
 
 int flow_field::width() const { return cellWidth; }
@@ -54,4 +59,16 @@ inline int flow_field::index(int x, int y) const {
         return y * cellWidth + x;
     }
     return -1;
+}
+
+vec2 flow_field::cell_to_world(int cx, int cy) const {
+    return vec2((f32)cx * cellSize + offsetX, (f32)cy * cellSize + offsetY);
+}
+
+bool flow_field::world_to_cell(vec2 pos, int& cx, int& cy) const {
+    cx = (int)((pos.x - offsetX) / cellSize);
+    cy = (int)((pos.y - offsetY) / cellSize);
+
+    // return true if is valid index, false otherwise
+    return index(cx, cy) >= 0;
 }

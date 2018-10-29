@@ -4,9 +4,14 @@
 #include <vector>
 #include <limits>
 
+enum class path_dir {
+    kCW,
+    kCCW
+};
+
 class path {
 public:
-    path(f32 width, std::initializer_list<vec2> pts);
+    path(path_dir dir, f32 width, std::initializer_list<vec2> pts);
 
     // find nearest point on path to point p
     vec2 nearest(const vec2& p, vec2& direction);
@@ -18,5 +23,6 @@ public:
 
 private:
     std::vector<vec2> points;
+    path_dir dir;
     f32 width;
 };
