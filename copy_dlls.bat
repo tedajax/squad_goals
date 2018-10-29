@@ -1,1 +1,1 @@
-xcopy ..\external\lib\%1\*.dll . /y
+xcopy ..\external\lib\%1\%2\*.dll . /y

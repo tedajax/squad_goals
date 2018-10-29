@@ -7,7 +7,7 @@
 class flow_field {
 public:
     flow_field(f32 worldWidth, f32 worldHeight, f32 cellSize);
-    void perlin_angles(const perlin_gen& perlin, f32 z = 0.f);
+    void perlin_angles(const perlin_gen& perlin, f32 scale, f32 z = 0.f);
     void set(int cellX, int cellY, vec2 vec);
     vec2 get(int cx, int cy) const;
     vec2 get(f32 x, f32 y) const;

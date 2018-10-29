@@ -3,13 +3,18 @@
 #include "types.h"
 #include <limits>
 
+struct b2Vec2;
+
 class vec2 {
 public:
     vec2() : x(0), y(0) { }
     vec2(const vec2& other) : x(other.x), y(other.y) {}
+    vec2(const b2Vec2& b2vec);
     vec2(vec2&& other) : x(other.x), y(other.y) {}
     vec2(f32 x, f32 y) : x(x), y(y) { }
     vec2(int x, int y) : x((f32)x), y((f32)y) { }
+
+    operator b2Vec2() const;
 
     inline vec2 operator=(const vec2& other) {
         x = other.x;
@@ -47,12 +52,22 @@ public:
         return *this;
     }
 
+    inline vec2& operator/=(int scalar) {
+        x /= (f32)scalar;
+        y /= (f32)scalar;
+        return *this;
+    }
+
     inline f32 len() const{
         return std::sqrt(x *x + y * y);
     }
 
     inline f32 len2() const {
         return x * x + y * y;
+    }
+
+    inline f32 dot(const vec2& other) const {
+        return x * other.x + y * other.y;
     }
 
     void decompose(vec2& direction, f32& magnitude) {
@@ -65,11 +80,12 @@ public:
         }
     }
 
-    void normalize() {
+    vec2 normalize() {
         f32 l = len();
         if (l > 0) {
             *this /= l;
         }
+        return *this;
     }
 
     static vec2 normalize(const vec2& v) {
@@ -86,6 +102,56 @@ public:
     static vec2 perpendicular(const vec2& v) {
         return vec2(-v.y, v.x);
     }
+
+    static f32 dot(const vec2& a, const vec2& b) {
+        return a.x * b.x + a.y * b.y;
+    }
+
+    static f32 dist(const vec2& a, const vec2& b) {
+        return sqrtf((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+    }
+
+    static vec2 left(const vec2& a, const vec2& b) {
+        return (a.x <= b.x) ? a : b;
+    }
+
+    static vec2 right(const vec2& a, const vec2& b) {
+        return (a.x >= b.x) ? a : b;
+    }
+
+    static vec2 top(const vec2& a, const vec2& b) {
+        return (a.y <= b.y) ? a : b;
+    }
+
+    static vec2 bottom(const vec2& a, const vec2& b) {
+        return (a.y >= b.y) ? a : b;
+    }
+
+    static vec2 clamp_to_segment(const vec2& v, const vec2& a, const vec2& b) {
+        // special rules for vertical line
+        if (a.x - b.x == 0) {
+            vec2 t = top(a, b), b = bottom(a, b);
+            if (v.y < t.y) {
+                return t;
+            }
+            else if (v.y > b.y) {
+                return b;
+            }
+        }
+        else {
+            vec2 l = left(a, b), r = right(a, b);
+            if (v.x < l.x) {
+                return l;
+            }
+            else if (v.x > r.x) {
+                return r;
+            }
+        }
+
+        return v;
+    }
+
+    static f32 angle_between(const vec2& a, const vec2& b);
 
     void limit(f32 mag) {
         f32 l = len();

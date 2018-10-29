@@ -10,11 +10,11 @@ flow_field::flow_field(f32 worldWidth, f32 worldHeight, f32 cellSize)
     vectors.resize(cellWidth * cellHeight);
 }
 
-void flow_field::perlin_angles(const perlin_gen& perlin, f32 z /* = 0.f */) {
+void flow_field::perlin_angles(const perlin_gen& perlin, f32 scale, f32 z /* = 0.f */) {
     for (int i = 0; i < cellWidth; ++i) {
         for (int j = 0; j < cellHeight; ++j) {
-            f32 v = perlin.noise((f32)i / cellWidth, (f32)j / cellHeight, z);
-            set(i, j, math::vec2_from_angle(v * 360.f));
+            f32 v = perlin.noise((f32)i / cellWidth * scale, (f32)j / cellHeight * scale, z);
+            set(i, j, math::vec2_from_angle(v * 720.f));
         }
     }
 }
