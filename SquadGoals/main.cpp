@@ -7,6 +7,8 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 
+#include <GL/glew.h>
+
 #include <Box2D/Box2D.h>
 
 #include <effolkronium/random.hpp>
@@ -17,13 +19,14 @@
 #include "box2dSdlDebugDraw.h"
 #include "path.h"
 #include "input_state.h"
+#include "renderer.h"
 
 struct agent {
     vec2 position = vec2::ZERO;
     vec2 velocity = vec2::ZERO;
     vec2 acceleration = vec2::ZERO;
     f32 rotation = 0;
-    
+
     vec2 target = vec2::ZERO;
 
     vec2 future;
@@ -75,21 +78,28 @@ int main(int argc, char* argv[]) {
 
     TTF_Font* debugFont = TTF_OpenFont("assets/prstartk.ttf", 16);
 
+
+
     SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
-    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    
+    renderer r;
+    r.init(window);
+
+    camera cam;
+    cam.position = glm::vec3(1.f, 0.f, 10.f);
 
     path agentPath(path_dir::kCW, 2.5f, { vec2(-10, -8), vec2(0, -7), vec2(10, -8), vec2(14, 0), vec2(10, 8), vec2(0, 7), vec2(-10, 8), vec2(-14, 0) });
 
     b2World world(vec2::ZERO);
 
-    box2dSdlDebugDraw sdlDebugDraw(renderer);
-    world.SetDebugDraw(&sdlDebugDraw);
+    //box2dSdlDebugDraw sdlDebugDraw(renderer);
+    //world.SetDebugDraw(&sdlDebugDraw);
 
     const i32 velocityIterations = 8;
     const i32 positionIterations = 8;
 
-    SDL_Surface* dudeSurface = IMG_Load("assets/dude.png");
-    SDL_Texture* dudeTexture = SDL_CreateTextureFromSurface(renderer, dudeSurface);
+    /*SDL_Surface* dudeSurface = IMG_Load("assets/dude.png");
+    SDL_Texture* dudeTexture = SDL_CreateTextureFromSurface(renderer, dudeSurface);*/
 
     std::vector<agent> agents;
     flow_field flowField(40.f, 36.f, 1.f, -20.f, -18.f);
@@ -97,7 +107,7 @@ int main(int argc, char* argv[]) {
     perlin_gen perlin(10000);
     flowField.perlin_angles(perlin, 1.f);
 
-    const int AGENT_COUNT = 100;
+    const int AGENT_COUNT = 1;
 
     for (int i = 0; i < AGENT_COUNT; ++i) {
         agent ag;
@@ -124,13 +134,13 @@ int main(int argc, char* argv[]) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
-                case SDL_KEYDOWN:
-                    if (event.key.keysym.scancode != SDL_SCANCODE_ESCAPE) {
-                        break;
-                    }
-                case SDL_QUIT:
-                    isRunning = false;
+            case SDL_KEYDOWN:
+                if (event.key.keysym.scancode != SDL_SCANCODE_ESCAPE) {
                     break;
+                }
+            case SDL_QUIT:
+                isRunning = false;
+                break;
             }
         }
 
@@ -161,9 +171,28 @@ int main(int argc, char* argv[]) {
             }
         }
 
-
         // UPDATE
         {
+            // camera movement
+            {
+                const f32 speed = 5.f * dt;
+                if (input.get_key(SDL_SCANCODE_D)) {
+                    cam.move_relative(glm::vec3(speed, 0, 0));
+                }
+
+                if (input.get_key(SDL_SCANCODE_A)) {
+                    cam.move_relative(glm::vec3(-speed, 0, 0));
+                }
+
+                if (input.get_key(SDL_SCANCODE_W)) {
+                    cam.move_relative(glm::vec3(0, 0, -speed));
+                }
+
+                if (input.get_key(SDL_SCANCODE_S)) {
+                    cam.move_relative(glm::vec3(0, 0, speed));
+                }
+            }
+
             {
                 auto agent = agents[0];
                 vec2 pos = agent.body->GetPosition();
@@ -190,7 +219,7 @@ int main(int argc, char* argv[]) {
 
             a += 0.1f * dt;
             flowField.perlin_angles(perlin, 1.f + math::ping_pong(a, 3.f), math::ping_pong(a, 100.f));
-          
+
 
             for (auto& agent : agents) {
                 agent.position = agent.body->GetPosition();
@@ -228,7 +257,7 @@ int main(int argc, char* argv[]) {
                 }();
 
                 // SEPARATE
-                vec2 separation = [&agent, &agents] () -> vec2 {
+                vec2 separation = [&agent, &agents]() -> vec2 {
                     vec2 sum = vec2::ZERO;
                     int count = 0;
                     for (auto& other : agents) {
@@ -314,80 +343,89 @@ int main(int argc, char* argv[]) {
 
         // RENDER
         {
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-            SDL_RenderClear(renderer);
-
-            SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-
-            // debug flow field
-            for (int x = 0; x < flowField.width(); ++x) {
-                for (int y = 0; y < flowField.height(); ++y) {
-                    vec2 v = flowField.get(x, y);
-                    render_direction(renderer, flowField.cell_center(x, y), v, flowField.cell_size());
-                }
+            for (f32 a = 0; a < 360; a += 10) {
+                f32 b = a + 10;
+                vec2 p0 = math::vec2_from_angle(a);
+                vec2 p1 = math::vec2_from_angle(b);
+                r.line(glm::vec3(p0.x, p0.y, 0), glm::vec3(p1.x, p1.y, 0), glm::vec4(1, 1, 1, 1));
             }
+            //r.line(glm::vec3(-5, 0, 0), glm::vec3(5, 0, 0), glm::vec4(1, 0, 0, 1));
+            r.render(cam);
 
-            // debug path
-            SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-            for (int i = 0; i < agentPath.path_points().size(); ++i) {
-                vec2 pt1 = agentPath.path_points()[i];
-                vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
-                int x1, y1, x2, y2;
-                world_to_screen(pt1.x, pt1.y, x1, y1);
-                world_to_screen(pt2.x, pt2.y, x2, y2);
-                SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
-                render_circle(renderer, x1, y1, 8);
-            }
+            //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+            //SDL_RenderClear(renderer);
 
-            //{
-            //    vec2 dir;
-            //    vec2 nearest = agentPath.nearest(agents[0].future, dir);
-            //    SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
-            //    int sx, sy;
-            //    world_to_screen(nearest.x, nearest.y, sx, sy);
-            //    render_circle(renderer, sx, sy, 8);
+            //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
+
+            //// debug flow field
+            //for (int x = 0; x < flowField.width(); ++x) {
+            //    for (int y = 0; y < flowField.height(); ++y) {
+            //        vec2 v = flowField.get(x, y);
+            //        render_direction(renderer, flowField.cell_center(x, y), v, flowField.cell_size());
+            //    }
             //}
 
-            for (const auto& agent : agents) {
-                SDL_Rect rect = {
-                    (int)((agent.position.x - 0.5f) * 32 + 640), (int)((agent.position.y - 0.5f) * 32 + 360),
-                    32, 32
-                };
+            //// debug path
+            //SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
+            //for (int i = 0; i < agentPath.path_points().size(); ++i) {
+            //    vec2 pt1 = agentPath.path_points()[i];
+            //    vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
+            //    int x1, y1, x2, y2;
+            //    world_to_screen(pt1.x, pt1.y, x1, y1);
+            //    world_to_screen(pt2.x, pt2.y, x2, y2);
+            //    SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
+            //    render_circle(renderer, x1, y1, 8);
+            //}
 
-                int px, py, fx, fy, tx, ty;
-                world_to_screen(agent.position.x, agent.position.y, px, py);
-                world_to_screen(agent.future.x, agent.future.y, fx, fy);
-                world_to_screen(agent.target.x, agent.target.y, tx, ty);
+            ////{
+            ////    vec2 dir;
+            ////    vec2 nearest = agentPath.nearest(agents[0].future, dir);
+            ////    SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
+            ////    int sx, sy;
+            ////    world_to_screen(nearest.x, nearest.y, sx, sy);
+            ////    render_circle(renderer, sx, sy, 8);
+            ////}
 
-                //SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
-                //SDL_RenderDrawLine(renderer, px, py, fx, fy);
-                //SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-                //SDL_RenderDrawLine(renderer, fx, fy, tx, ty);
-                //render_circle(renderer, fx, fy, (int)agent.projectionRadius * 32);
+            //for (const auto& agent : agents) {
+            //    SDL_Rect rect = {
+            //        (int)((agent.position.x - 0.5f) * 32 + 640), (int)((agent.position.y - 0.5f) * 32 + 360),
+            //        32, 32
+            //    };
 
-                SDL_RenderCopyEx(renderer, dudeTexture, nullptr, &rect, agent.rotation, nullptr, SDL_FLIP_NONE);
-            }
+            //    int px, py, fx, fy, tx, ty;
+            //    world_to_screen(agent.position.x, agent.position.y, px, py);
+            //    world_to_screen(agent.future.x, agent.future.y, fx, fy);
+            //    world_to_screen(agent.target.x, agent.target.y, tx, ty);
 
-            // render FPS
-            {
-                char buffer[256] = { 0 };
-                snprintf(buffer, 16, "FPS: %d", fps);
-                SDL_Color white = { 255, 255, 255, 255 };
-                SDL_Surface* fpsTextSurface = TTF_RenderText_Solid(debugFont, buffer, white);
-                SDL_Texture* fpsTexture = SDL_CreateTextureFromSurface(renderer, fpsTextSurface);
+            //    //SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
+            //    //SDL_RenderDrawLine(renderer, px, py, fx, fy);
+            //    //SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
+            //    //SDL_RenderDrawLine(renderer, fx, fy, tx, ty);
+            //    //render_circle(renderer, fx, fy, (int)agent.projectionRadius * 32);
 
-                SDL_Rect destRect = { 0, 0, 100, 20 };
-                SDL_RenderCopy(renderer, fpsTexture, nullptr, &destRect);
+            //    SDL_RenderCopyEx(renderer, dudeTexture, nullptr, &rect, agent.rotation, nullptr, SDL_FLIP_NONE);
+            //}
 
-                SDL_DestroyTexture(fpsTexture);
-                SDL_FreeSurface(fpsTextSurface);
-            }
+            //// render FPS
+            //{
+            //    char buffer[256] = { 0 };
+            //    snprintf(buffer, 16, "FPS: %d", fps);
+            //    SDL_Color white = { 255, 255, 255, 255 };
+            //    SDL_Surface* fpsTextSurface = TTF_RenderText_Solid(debugFont, buffer, white);
+            //    SDL_Texture* fpsTexture = SDL_CreateTextureFromSurface(renderer, fpsTextSurface);
 
-            SDL_RenderPresent(renderer);
+            //    SDL_Rect destRect = { 0, 0, 100, 20 };
+            //    SDL_RenderCopy(renderer, fpsTexture, nullptr, &destRect);
+
+            //    SDL_DestroyTexture(fpsTexture);
+            //    SDL_FreeSurface(fpsTextSurface);
+            //}
+
+            //SDL_RenderPresent(renderer);
         }
     }
 
-    SDL_DestroyRenderer(renderer);
+    //SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
 
     return 0;
@@ -416,7 +454,7 @@ void render_circle(SDL_Renderer* renderer, int cx, int cy, int radius) {
             err += dy;
             dy += 2;
         }
-        
+
         if (err > 0) {
             x--;
             dx += 2;
