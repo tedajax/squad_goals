@@ -1,13 +1,20 @@
 #include "camera.h"
+#include <cstdio>
 
 void camera::move_relative(glm::vec3 movement) {
-    position += movement * rotation;
+    position += rotation * movement;
+}
+
+void camera::rotate(glm::quat rotation) {
+    this->rotation = rotation * this->rotation;
 }
 
 glm::mat4x4 camera::look_at() const {
-    glm::vec3 center = position + glm::vec3(0.f, 0.f, -1.f) * rotation;
-    glm::vec3 up = glm::vec3(0.f, 1.f, 0.f) * rotation;
-    return glm::lookAt(position, center, up);
+    auto forwardWorld = rotation * glm::vec3(0.f, 0.f, -1.f);
+    auto upWorld = rotation * glm::vec3(0.f, 1.f, 0.f);
+
+    glm::vec3 center = position + forwardWorld;
+    return glm::lookAt(position, center, upWorld);
 }
 
 glm::mat4x4 camera::projection() const {

@@ -7,8 +7,8 @@ bool renderer::init(SDL_Window* window) {
     this->window = window;
 
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 4);
 
     gl = SDL_GL_CreateContext(window);
 
@@ -19,10 +19,38 @@ bool renderer::init(SDL_Window* window) {
 
     glClearColor(0.15f, 0.15f, 0.15f, 1.0f);
 
-    glGenBuffers(1, &lineVertexBuffer);
-    glGenBuffers(1, &lineColorBuffer);
-    glGenBuffers(1, &lineIndexBuffer);
+    glGenVertexArrays(2, &lineVertexArray);
+
+    glBindVertexArray(lineVertexArray);
+
+    glGenBuffers(3, &lineVertexBuffer);
+
+    glBindBuffer(GL_ARRAY_BUFFER, lineVertexBuffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, lineColorBuffer);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(1);
+
+    glBindVertexArray(triVertexArray);
+
+    glGenBuffers(3, &triVertexBuffer);
+
+    glBindBuffer(GL_ARRAY_BUFFER, triVertexBuffer);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, triColorBuffer);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(1);
+
+
+    //glGenBuffers(3, &lineVertexBuffer);
+    //glGenBuffers(3, &triVertexBuffer);
     
+    
+
     const char* vertexShader =
         "#version 330 core\n"
         "layout(location = 0) in vec3 vertexPosition;\n"
@@ -62,41 +90,38 @@ bool renderer::init(SDL_Window* window) {
     glDeleteShader(vertexShaderId);
     glDeleteShader(fragmentShaderId);
 
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
     return true;
 }
 
 void renderer::line(const glm::vec3& from, const glm::vec3& to, const glm::vec4& color) {
-    lineVertices.push_back(from.x);
-    lineVertices.push_back(from.y);
-    lineVertices.push_back(from.z);
+    lineVertices.push_back(from);
+    lineVertices.push_back(to);
 
-    lineVertices.push_back(to.x);
-    lineVertices.push_back(to.y);
-    lineVertices.push_back(to.z);
+    lineColors.push_back(glm::vec3(color));
+    lineColors.push_back(glm::vec3(color));
 
-    lineColors.push_back(color.r);
-    lineColors.push_back(color.g);
-    lineColors.push_back(color.b);
+    lineIndices.push_back(currentLineIndex++);
+    lineIndices.push_back(currentLineIndex++);
+}
 
-    lineColors.push_back(color.r);
-    lineColors.push_back(color.g);
-    lineColors.push_back(color.b);
+void renderer::tri(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color) {
+    triVertices.push_back(a);
+    triVertices.push_back(b);
+    triVertices.push_back(c);
 
-    lineIndices.push_back(currentIndex++);
-    lineIndices.push_back(currentIndex++);
+    triColors.push_back(glm::vec3(color));
+    triColors.push_back(glm::vec3(color));
+    triColors.push_back(glm::vec3(color));
+
+    triIndices.push_back(currentTriIndex++);
+    triIndices.push_back(currentTriIndex++);
+    triIndices.push_back(currentTriIndex++);
 }
 
 void renderer::render(const camera& cam) {
-    glBindBuffer(GL_ARRAY_BUFFER, lineVertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * lineVertices.size(), &lineVertices[0], GL_DYNAMIC_DRAW);
-
-    glBindBuffer(GL_ARRAY_BUFFER, lineColorBuffer);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(f32) * lineColors.size(), &lineColors[0], GL_DYNAMIC_DRAW);
-
-    /*glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * lineIndices.size(), &lineVertices[0], GL_DYNAMIC_DRAW);
-*/
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glUseProgram(programId);
@@ -107,28 +132,51 @@ void renderer::render(const camera& cam) {
 
     glm::mat4 mvp = projection * view * model;
 
+
     GLuint mvpUniform = glGetUniformLocation(programId, "MVP");
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, &mvp[0][0]);
 
-    glEnableVertexAttribArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, lineVertexBuffer);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    // triangles
+    {
+        glBindVertexArray(triVertexArray);
 
-    glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, lineColorBuffer);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glBindBuffer(GL_ARRAY_BUFFER, triVertexBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * triVertices.size(), triVertices.data(), GL_DYNAMIC_DRAW);
 
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
-    //glDrawElements(GL_LINES, lineIndices.size(), GL_UNSIGNED_INT, nullptr);
-    glDrawArrays(GL_LINES, 0, 2);
+        glBindBuffer(GL_ARRAY_BUFFER, triColorBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * triColors.size(), triColors.data(), GL_DYNAMIC_DRAW);
 
-    glDisableVertexAttribArray(0);
-    glDisableVertexAttribArray(1);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triIndexBuffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * triIndices.size(), triIndices.data(), GL_DYNAMIC_DRAW);
+
+        glDrawElements(GL_TRIANGLES, triIndices.size(), GL_UNSIGNED_INT, nullptr);
+    }
+
+    // lines
+    {
+        glBindVertexArray(lineVertexArray);
+
+        glBindBuffer(GL_ARRAY_BUFFER, lineVertexBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * lineVertices.size(), lineVertices.data(), GL_DYNAMIC_DRAW);
+
+        glBindBuffer(GL_ARRAY_BUFFER, lineColorBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * lineColors.size(), lineColors.data(), GL_DYNAMIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * lineIndices.size(), lineIndices.data(), GL_DYNAMIC_DRAW);
+
+        glDrawElements(GL_LINES, lineIndices.size(), GL_UNSIGNED_INT, nullptr);
+    }
 
     SDL_GL_SwapWindow(window);
 
     lineVertices.clear();
     lineColors.clear();
     lineIndices.clear();
-    currentIndex = 0;
+    currentLineIndex = 0;
+    
+    triVertices.clear();
+    triColors.clear();
+    triIndices.clear();
+    currentTriIndex = 0;
 }

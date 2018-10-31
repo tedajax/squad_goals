@@ -78,15 +78,13 @@ int main(int argc, char* argv[]) {
 
     TTF_Font* debugFont = TTF_OpenFont("assets/prstartk.ttf", 16);
 
-
-
     SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
     
     renderer r;
     r.init(window);
 
     camera cam;
-    cam.position = glm::vec3(1.f, 0.f, 10.f);
+    cam.position = glm::vec3(0.f, 2.f, 10.f);
 
     path agentPath(path_dir::kCW, 2.5f, { vec2(-10, -8), vec2(0, -7), vec2(10, -8), vec2(14, 0), vec2(10, 8), vec2(0, 7), vec2(-10, 8), vec2(-14, 0) });
 
@@ -107,7 +105,7 @@ int main(int argc, char* argv[]) {
     perlin_gen perlin(10000);
     flowField.perlin_angles(perlin, 1.f);
 
-    const int AGENT_COUNT = 1;
+    const int AGENT_COUNT = 100;
 
     for (int i = 0; i < AGENT_COUNT; ++i) {
         agent ag;
@@ -147,7 +145,8 @@ int main(int argc, char* argv[]) {
         input.update();
 
         int mx, my;
-        SDL_GetMouseState(&mx, &my);
+        u32 mb = SDL_GetRelativeMouseState(&mx, &my);
+
 
         // TIME
         {
@@ -190,6 +189,13 @@ int main(int argc, char* argv[]) {
 
                 if (input.get_key(SDL_SCANCODE_S)) {
                     cam.move_relative(glm::vec3(0, 0, speed));
+                }
+
+                if ((mb & 4) != 0) {
+                    printf("%.3f, %.3f\n", mx / 32.f, my / 32.f);
+                    glm::quat pitch = glm::angleAxis(my / 32.f, glm::vec3(1, 0, 0));
+                    glm::quat yaw = glm::angleAxis(mx / 32.f, glm::vec3(0, 1, 0));
+                    cam.rotate(pitch);
                 }
             }
 
@@ -343,14 +349,9 @@ int main(int argc, char* argv[]) {
 
         // RENDER
         {
-            for (f32 a = 0; a < 360; a += 10) {
-                f32 b = a + 10;
-                vec2 p0 = math::vec2_from_angle(a);
-                vec2 p1 = math::vec2_from_angle(b);
-                r.line(glm::vec3(p0.x, p0.y, 0), glm::vec3(p1.x, p1.y, 0), glm::vec4(1, 1, 1, 1));
-            }
-            //r.line(glm::vec3(-5, 0, 0), glm::vec3(5, 0, 0), glm::vec4(1, 0, 0, 1));
-            r.render(cam);
+            r.line(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec4(1, 0, 0, 1));
+            r.line(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec4(0, 1, 0, 1));
+            r.line(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec4(0, 0, 1, 1));
 
             //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
             //SDL_RenderClear(renderer);
@@ -366,16 +367,11 @@ int main(int argc, char* argv[]) {
             //}
 
             //// debug path
-            //SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
-            //for (int i = 0; i < agentPath.path_points().size(); ++i) {
-            //    vec2 pt1 = agentPath.path_points()[i];
-            //    vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
-            //    int x1, y1, x2, y2;
-            //    world_to_screen(pt1.x, pt1.y, x1, y1);
-            //    world_to_screen(pt2.x, pt2.y, x2, y2);
-            //    SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
-            //    render_circle(renderer, x1, y1, 8);
-            //}
+            for (int i = 0; i < agentPath.path_points().size(); ++i) {
+                vec2 pt1 = agentPath.path_points()[i];
+                vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
+                r.line(pt1, pt2, glm::vec4(1, 1, 0, 1));
+            }
 
             ////{
             ////    vec2 dir;
@@ -405,6 +401,28 @@ int main(int argc, char* argv[]) {
 
             //    SDL_RenderCopyEx(renderer, dudeTexture, nullptr, &rect, agent.rotation, nullptr, SDL_FLIP_NONE);
             //}
+
+            for (const auto& agent : agents) {
+                SDL_Rect rect = {
+                    (int)((agent.position.x - 0.5f) * 32 + 640), (int)((agent.position.y - 0.5f) * 32 + 360),
+                    32, 32
+                };
+
+                int px, py, fx, fy, tx, ty;
+                world_to_screen(agent.position.x, agent.position.y, px, py);
+                world_to_screen(agent.future.x, agent.future.y, fx, fy);
+                world_to_screen(agent.target.x, agent.target.y, tx, ty);
+
+                [&agent, &r] {
+                    auto forward = .5f * math::vec2_from_angle(agent.rotation) + agent.position;
+                    auto left = .5f * math::vec2_from_angle(agent.rotation - 135) + agent.position;
+                    auto right = .5f * math::vec2_from_angle(agent.rotation + 135) + agent.position;
+
+                    r.tri(left, forward, right, glm::vec4(0, 1, 0, 1));
+                }();
+            }
+
+            r.render(cam);
 
             //// render FPS
             //{

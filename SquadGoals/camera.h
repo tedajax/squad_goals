@@ -8,10 +8,11 @@
 
 struct camera {
     glm::vec3 position;
-    glm::quat rotation;
+    glm::quat rotation = glm::quat();
 
     void move_relative(glm::vec3 movement);
+    void rotate(glm::quat rotation);
 
-    glm::mat4x4 look_at() const;
-    glm::mat4x4 projection() const;
+    glm::mat4 look_at() const;
+    glm::mat4 projection() const;
 };

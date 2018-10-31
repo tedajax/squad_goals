@@ -2,6 +2,7 @@
 
 #include "types.h"
 #include <limits>
+#include <glm/vec3.hpp>
 
 struct b2Vec2;
 
@@ -15,6 +16,7 @@ public:
     vec2(int x, int y) : x((f32)x), y((f32)y) { }
 
     operator b2Vec2() const;
+    operator glm::vec3() const;
 
     inline vec2 operator=(const vec2& other) {
         x = other.x;
