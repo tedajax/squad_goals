@@ -6,10 +6,13 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
+#include "algebra.h"
+
 struct camera {
     glm::vec3 position;
-    glm::quat rotation = glm::quat();
+    glm::quat rotation = glm::angleAxis(-45.f * math::DEG_TO_RAD, glm::vec3(1, 0, 0));
 
+    void move(glm::vec3 movement);
     void move_relative(glm::vec3 movement);
     void rotate(glm::quat rotation);
 

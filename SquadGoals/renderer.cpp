@@ -33,15 +33,15 @@ bool renderer::init(SDL_Window* window) {
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(1);
 
-    glBindVertexArray(triVertexArray);
+    glBindVertexArray(fillVertexArray);
 
-    glGenBuffers(3, &triVertexBuffer);
+    glGenBuffers(3, &fillVertexBuffer);
 
-    glBindBuffer(GL_ARRAY_BUFFER, triVertexBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, fillVertexBuffer);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(0);
 
-    glBindBuffer(GL_ARRAY_BUFFER, triColorBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, fillColorBuffer);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glEnableVertexAttribArray(1);
 
@@ -107,18 +107,24 @@ void renderer::line(const glm::vec3& from, const glm::vec3& to, const glm::vec4&
     lineIndices.push_back(currentLineIndex++);
 }
 
-void renderer::tri(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color) {
-    triVertices.push_back(a);
-    triVertices.push_back(b);
-    triVertices.push_back(c);
+void renderer::triangle(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color) {
+    line(a, b, color);
+    line(b, c, color);
+    line(c, a, color);
+}
 
-    triColors.push_back(glm::vec3(color));
-    triColors.push_back(glm::vec3(color));
-    triColors.push_back(glm::vec3(color));
+void renderer::fill_triangle(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color) {
+    fillVertices.push_back(a);
+    fillVertices.push_back(b);
+    fillVertices.push_back(c);
 
-    triIndices.push_back(currentTriIndex++);
-    triIndices.push_back(currentTriIndex++);
-    triIndices.push_back(currentTriIndex++);
+    fillColors.push_back(glm::vec3(color));
+    fillColors.push_back(glm::vec3(color));
+    fillColors.push_back(glm::vec3(color));
+
+    fillIndices.push_back(currentFillIndex++);
+    fillIndices.push_back(currentFillIndex++);
+    fillIndices.push_back(currentFillIndex++);
 }
 
 void renderer::render(const camera& cam) {
@@ -138,18 +144,18 @@ void renderer::render(const camera& cam) {
 
     // triangles
     {
-        glBindVertexArray(triVertexArray);
+        glBindVertexArray(fillVertexArray);
 
-        glBindBuffer(GL_ARRAY_BUFFER, triVertexBuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * triVertices.size(), triVertices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, fillVertexBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * fillVertices.size(), fillVertices.data(), GL_DYNAMIC_DRAW);
 
-        glBindBuffer(GL_ARRAY_BUFFER, triColorBuffer);
-        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * triColors.size(), triColors.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, fillColorBuffer);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * fillColors.size(), fillColors.data(), GL_DYNAMIC_DRAW);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, triIndexBuffer);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * triIndices.size(), triIndices.data(), GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fillIndexBuffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * fillIndices.size(), fillIndices.data(), GL_DYNAMIC_DRAW);
 
-        glDrawElements(GL_TRIANGLES, triIndices.size(), GL_UNSIGNED_INT, nullptr);
+        glDrawElements(GL_TRIANGLES, fillIndices.size(), GL_UNSIGNED_INT, nullptr);
     }
 
     // lines
@@ -175,8 +181,8 @@ void renderer::render(const camera& cam) {
     lineIndices.clear();
     currentLineIndex = 0;
     
-    triVertices.clear();
-    triColors.clear();
-    triIndices.clear();
-    currentTriIndex = 0;
+    fillVertices.clear();
+    fillColors.clear();
+    fillIndices.clear();
+    currentFillIndex = 0;
 }

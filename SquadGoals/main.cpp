@@ -20,6 +20,7 @@
 #include "path.h"
 #include "input_state.h"
 #include "renderer.h"
+#include "flatdraw.h"
 
 struct agent {
     vec2 position = vec2::ZERO;
@@ -64,11 +65,6 @@ static void init_agent(agent& ag, b2World& world) {
 
 using Random = effolkronium::random_static;
 
-void render_circle(SDL_Renderer* renderer, int cx, int cy, int radius);
-void render_direction(SDL_Renderer* renderer, vec2 center, vec2 direction, f32 length);
-void world_to_screen(f32 wx, f32 wy, int& sx, int& sy);
-void screen_to_world(int sx, int sy, f32& wx, f32& wy);
-
 int main(int argc, char* argv[]) {
     Random::seed(1);
     input_state input;
@@ -82,6 +78,8 @@ int main(int argc, char* argv[]) {
     
     renderer r;
     r.init(window);
+
+    flat_draw_context draw(r);
 
     camera cam;
     cam.position = glm::vec3(0.f, 2.f, 10.f);
@@ -176,26 +174,35 @@ int main(int argc, char* argv[]) {
             {
                 const f32 speed = 5.f * dt;
                 if (input.get_key(SDL_SCANCODE_D)) {
-                    cam.move_relative(glm::vec3(speed, 0, 0));
+                    cam.move(glm::vec3(speed, 0, 0));
                 }
 
                 if (input.get_key(SDL_SCANCODE_A)) {
-                    cam.move_relative(glm::vec3(-speed, 0, 0));
+                    cam.move(glm::vec3(-speed, 0, 0));
                 }
 
                 if (input.get_key(SDL_SCANCODE_W)) {
-                    cam.move_relative(glm::vec3(0, 0, -speed));
+                    cam.move(glm::vec3(0, 0, -speed));
                 }
 
                 if (input.get_key(SDL_SCANCODE_S)) {
-                    cam.move_relative(glm::vec3(0, 0, speed));
+                    cam.move(glm::vec3(0, 0, speed));
+                }
+
+                if (input.get_key(SDL_SCANCODE_Q)) {
+                    cam.move(glm::vec3(0, -speed, 0));
+                }
+
+                if (input.get_key(SDL_SCANCODE_E)) {
+                    cam.move(glm::vec3(0, speed, 0));
                 }
 
                 if ((mb & 4) != 0) {
                     printf("%.3f, %.3f\n", mx / 32.f, my / 32.f);
-                    glm::quat pitch = glm::angleAxis(my / 32.f, glm::vec3(1, 0, 0));
-                    glm::quat yaw = glm::angleAxis(mx / 32.f, glm::vec3(0, 1, 0));
-                    cam.rotate(pitch);
+                    glm::quat pitch = glm::angleAxis(-my / 64.f, glm::vec3(1, 0, 0));
+                    glm::quat yaw = glm::angleAxis(-mx / 64.f, glm::vec3(0, 1, 0));
+                    //cam.rotate(pitch);
+                    cam.rotate(yaw);
                 }
             }
 
@@ -349,14 +356,10 @@ int main(int argc, char* argv[]) {
 
         // RENDER
         {
+            // origin handle
             r.line(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec4(1, 0, 0, 1));
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec4(0, 1, 0, 1));
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec4(0, 0, 1, 1));
-
-            //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
-            //SDL_RenderClear(renderer);
-
-            //SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
 
             //// debug flow field
             //for (int x = 0; x < flowField.width(); ++x) {
@@ -367,10 +370,11 @@ int main(int argc, char* argv[]) {
             //}
 
             //// debug path
+            draw.set_color(1, 1, 0);
             for (int i = 0; i < agentPath.path_points().size(); ++i) {
                 vec2 pt1 = agentPath.path_points()[i];
                 vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
-                r.line(pt1, pt2, glm::vec4(1, 1, 0, 1));
+                draw.line(pt1, pt2);
             }
 
             ////{
@@ -382,44 +386,16 @@ int main(int argc, char* argv[]) {
             ////    render_circle(renderer, sx, sy, 8);
             ////}
 
-            //for (const auto& agent : agents) {
-            //    SDL_Rect rect = {
-            //        (int)((agent.position.x - 0.5f) * 32 + 640), (int)((agent.position.y - 0.5f) * 32 + 360),
-            //        32, 32
-            //    };
 
-            //    int px, py, fx, fy, tx, ty;
-            //    world_to_screen(agent.position.x, agent.position.y, px, py);
-            //    world_to_screen(agent.future.x, agent.future.y, fx, fy);
-            //    world_to_screen(agent.target.x, agent.target.y, tx, ty);
-
-            //    //SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
-            //    //SDL_RenderDrawLine(renderer, px, py, fx, fy);
-            //    //SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);
-            //    //SDL_RenderDrawLine(renderer, fx, fy, tx, ty);
-            //    //render_circle(renderer, fx, fy, (int)agent.projectionRadius * 32);
-
-            //    SDL_RenderCopyEx(renderer, dudeTexture, nullptr, &rect, agent.rotation, nullptr, SDL_FLIP_NONE);
-            //}
-
+            draw.set_color(0, 1, 0);
             for (const auto& agent : agents) {
-                SDL_Rect rect = {
-                    (int)((agent.position.x - 0.5f) * 32 + 640), (int)((agent.position.y - 0.5f) * 32 + 360),
-                    32, 32
+                vec2 points[3] = {
+                    .5f * math::vec2_from_angle(agent.rotation) + agent.position,
+                    .5f * math::vec2_from_angle(agent.rotation - 135) + agent.position,
+                    .5f * math::vec2_from_angle(agent.rotation + 135) + agent.position
                 };
 
-                int px, py, fx, fy, tx, ty;
-                world_to_screen(agent.position.x, agent.position.y, px, py);
-                world_to_screen(agent.future.x, agent.future.y, fx, fy);
-                world_to_screen(agent.target.x, agent.target.y, tx, ty);
-
-                [&agent, &r] {
-                    auto forward = .5f * math::vec2_from_angle(agent.rotation) + agent.position;
-                    auto left = .5f * math::vec2_from_angle(agent.rotation - 135) + agent.position;
-                    auto right = .5f * math::vec2_from_angle(agent.rotation + 135) + agent.position;
-
-                    r.tri(left, forward, right, glm::vec4(0, 1, 0, 1));
-                }();
+                draw.lines(points, 3);
             }
 
             r.render(cam);
@@ -447,61 +423,4 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
 
     return 0;
-}
-
-// Midpoint Circle Algorithm
-void render_circle(SDL_Renderer* renderer, int cx, int cy, int radius) {
-    int x = radius - 1;
-    int y = 0;
-    int dx = 1;
-    int dy = 1;
-    int err = dx - (radius << 1); // radius * 2
-
-    while (x >= y) {
-        SDL_RenderDrawPoint(renderer, cx + x, cy + y);
-        SDL_RenderDrawPoint(renderer, cx + y, cy + x);
-        SDL_RenderDrawPoint(renderer, cx - y, cy + x);
-        SDL_RenderDrawPoint(renderer, cx - x, cy + y);
-        SDL_RenderDrawPoint(renderer, cx - x, cy - y);
-        SDL_RenderDrawPoint(renderer, cx - y, cy - x);
-        SDL_RenderDrawPoint(renderer, cx + y, cy - x);
-        SDL_RenderDrawPoint(renderer, cx + x, cy - y);
-
-        if (err <= 0) {
-            y++;
-            err += dy;
-            dy += 2;
-        }
-
-        if (err > 0) {
-            x--;
-            dx += 2;
-            err += dx - (radius << 1);
-        }
-    }
-}
-
-void render_direction(SDL_Renderer* renderer, vec2 center, vec2 direction, f32 length)
-{
-    vec2 p0 = center - direction * (length / 2);
-    vec2 p1 = center + direction * (length / 2);
-
-    int x0, y0, x1, y1;
-    world_to_screen(p0.x, p0.y, x0, y0);
-    world_to_screen(p1.x, p1.y, x1, y1);
-
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
-    SDL_RenderDrawLine(renderer, x0, y0, x1, y1);
-    SDL_SetRenderDrawColor(renderer, 0, 255, 255, 255);
-    SDL_RenderDrawPoint(renderer, x1, y1);
-}
-
-void world_to_screen(f32 wx, f32 wy, int& sx, int& sy) {
-    sx = (int)(wx * 32) + 640;
-    sy = (int)(wy * 32) + 360;
-}
-
-void screen_to_world(int sx, int sy, f32& wx, f32& wy) {
-    wx = (sx - 640) / 32.f;
-    wy = (sy - 360) / 32.f;
 }

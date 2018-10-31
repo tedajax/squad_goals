@@ -1,6 +1,10 @@
 #include "camera.h"
 #include <cstdio>
 
+void camera::move(glm::vec3 movement) {
+    position += movement;
+}
+
 void camera::move_relative(glm::vec3 movement) {
     position += rotation * movement;
 }
