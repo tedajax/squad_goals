@@ -12,6 +12,7 @@ enum class path_dir {
 class path {
 public:
     path(path_dir dir, f32 width, std::initializer_list<vec2> pts);
+    path(path_dir dir, f32 width, const vec2* pts, size_t count);
 
     // find nearest point on path to point p
     vec2 nearest(const vec2& p, vec2& direction);

@@ -4,17 +4,21 @@
 #include "camera.h"
 
 #include <SDL2/SDL.h>
-#include <GL/glew.h>
 
 #include <vector>
 
 class renderer {
 public:
     bool init(SDL_Window* window);
+    void shutdown();
     void line(const glm::vec3& from, const glm::vec3& to, const glm::vec4& color);
     void triangle(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color);
     void fill_triangle(const glm::vec3& a, const glm::vec3& b, const glm::vec3& c, const glm::vec4& color);
     void render(const camera& cam);
+
+    const char* glslVersion() const { return "#version 410 core"; }
+    SDL_GLContext  glContext() const { return gl; }
+
 private:
     SDL_GLContext gl;
 
@@ -29,18 +33,20 @@ private:
     uint currentLineIndex = 0;
     uint currentFillIndex = 0;
 
-    GLuint lineVertexArray;
-    GLuint fillVertexArray;
+    uint lineVertexArray;
+    uint fillVertexArray;
 
-    GLuint lineVertexBuffer;
-    GLuint lineColorBuffer;
-    GLuint lineIndexBuffer;
+    uint lineVertexBuffer;
+    uint lineColorBuffer;
+    uint lineIndexBuffer;
 
-    GLuint fillVertexBuffer;
-    GLuint fillColorBuffer;
-    GLuint fillIndexBuffer;
+    uint fillVertexBuffer;
+    uint fillColorBuffer;
+    uint fillIndexBuffer;
 
-    GLuint programId;
+    uint programId;
+
+    uint mvpUniform;
 
     SDL_Window* window;
 };

@@ -1,19 +1,37 @@
 #include "renderer.h"
 
+#include <GL/gl3w.h>
 #include <SDL2/SDL.h>
 #include <cstdio>
 
 bool renderer::init(SDL_Window* window) {
     this->window = window;
 
+    const char* glslVersion = "#version 410 core";
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 4);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    
+    SDL_DisplayMode current;
+    SDL_GetCurrentDisplayMode(0, &current);
 
     gl = SDL_GL_CreateContext(window);
 
-    glewExperimental = true;
-    if (glewInit() != GLEW_OK) {
+    // vsync
+    SDL_GL_SetSwapInterval(1);
+
+    if (gl3wInit() != GL3W_OK) {
+        fprintf(stderr, "gl3w failed to init.\n");
+        return false;
+    }
+
+    if (!gl3wIsSupported(4, 1)) {
+        fprintf(stderr, "OpenGL 4.1 is not supported.\n");
         return false;
     }
 
@@ -90,10 +108,17 @@ bool renderer::init(SDL_Window* window) {
     glDeleteShader(vertexShaderId);
     glDeleteShader(fragmentShaderId);
 
+    glUseProgram(programId);
+    mvpUniform = glGetUniformLocation(programId, "MVP");
+
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
 
     return true;
+}
+
+void renderer::shutdown() {
+    SDL_GL_DeleteContext(gl);
 }
 
 void renderer::line(const glm::vec3& from, const glm::vec3& to, const glm::vec4& color) {
@@ -139,7 +164,7 @@ void renderer::render(const camera& cam) {
     glm::mat4 mvp = projection * view * model;
 
 
-    GLuint mvpUniform = glGetUniformLocation(programId, "MVP");
+    
     glUniformMatrix4fv(mvpUniform, 1, GL_FALSE, &mvp[0][0]);
 
     // triangles
@@ -155,7 +180,7 @@ void renderer::render(const camera& cam) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, fillIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * fillIndices.size(), fillIndices.data(), GL_DYNAMIC_DRAW);
 
-        glDrawElements(GL_TRIANGLES, fillIndices.size(), GL_UNSIGNED_INT, nullptr);
+        glDrawElements(GL_TRIANGLES, (GLsizei)fillIndices.size(), GL_UNSIGNED_INT, nullptr);
     }
 
     // lines
@@ -171,10 +196,8 @@ void renderer::render(const camera& cam) {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lineIndexBuffer);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint) * lineIndices.size(), lineIndices.data(), GL_DYNAMIC_DRAW);
 
-        glDrawElements(GL_LINES, lineIndices.size(), GL_UNSIGNED_INT, nullptr);
+        glDrawElements(GL_LINES, (GLsizei)lineIndices.size(), GL_UNSIGNED_INT, nullptr);
     }
-
-    SDL_GL_SwapWindow(window);
 
     lineVertices.clear();
     lineColors.clear();
