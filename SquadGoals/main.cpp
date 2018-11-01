@@ -35,9 +35,29 @@ const char* seek_mode_strs[(int)agent_seek_mode::kCount] {
     "follow path",
 };
 
-struct agent_data {
-    agent_seek_mode seekMode = agent_seek_mode::kFollowPath;
+struct debug_config {
+    bool showWanderProjection = false;
+    bool showTarget = false;
+    bool showSeparationRadius = false;
+    bool showPath = false;
+};
 
+struct agent_config {
+    agent_seek_mode seekMode = agent_seek_mode::kFollowPath;
+    f32 maxSpeed = 10.f;
+    f32 maxAccel = 5.f;
+    f32 projectionDist = 4.f;
+    f32 projectionRadius = 1.f;
+    f32 wanderMult = 10.f;
+    f32 wanderInterval = 1 / 60.f;
+    f32 separationDist = 2.f;
+
+    f32 movementScalar = 1.f;
+    f32 flowScalar = 0.f;
+    f32 separationScalar = 0.1f;
+};
+
+struct steer_agent {
     vec2 position = vec2::ZERO;
     vec2 velocity = vec2::ZERO;
     vec2 acceleration = vec2::ZERO;
@@ -49,17 +69,10 @@ struct agent_data {
     f32 wanderAngle;
     f32 wanderTimer = 0.f;
 
-    f32 maxSpeed = 10.f;
-    f32 maxAccel = 5.f;
-    f32 projectionDist = 4.f;
-    f32 projectionRadius = 1.f;
-    f32 wanderMult = 10.f;
-    f32 wanderInterval = 1 / 60.f;
-
     b2Body* body;
 };
 
-static void init_agent(agent_data& ag, b2World& world) {
+static void init_agent(steer_agent& ag, b2World& world) {
     b2BodyDef bodyDef;
     bodyDef.type = b2_dynamicBody;
     bodyDef.position.Set(0.0f, 4.0f);
@@ -134,21 +147,23 @@ int main(int argc, char* argv[]) {
     /*SDL_Surface* dudeSurface = IMG_Load("assets/dude.png");
     SDL_Texture* dudeTexture = SDL_CreateTextureFromSurface(renderer, dudeSurface);*/
 
-    std::vector<agent_data> agents;
+    debug_config debugConfig;
+    agent_config agentConfig;
+
+    std::vector<steer_agent> agents;
     flow_field flowField(40.f, 36.f, 1.f, -20.f, -18.f);
 
     perlin_gen perlin(10000);
     flowField.perlin_angles(perlin, 1.f);
 
-    const int AGENT_COUNT = 100;
+    const int AGENT_COUNT = 40;
 
     for (int i = 0; i < AGENT_COUNT; ++i) {
-        agent_data ag;
+        steer_agent ag;
         ag.position.x = (f32)Random::get(-20, 20);
         ag.position.y = (f32)Random::get(-11, 11);
         ag.target.x = (f32)Random::get(-20, 20);
         ag.target.y = (f32)Random::get(-11, 11);
-        ag.maxSpeed += (f32)Random::get(0, 5);
         ag.wanderAngle = Random::get(0.f, 360.f);
         init_agent(ag, world);
         agents.push_back(ag);
@@ -189,25 +204,7 @@ int main(int argc, char* argv[]) {
         int mx, my;
         u32 mb = SDL_GetRelativeMouseState(&mx, &my);
 
-        {
-            ImGui::Begin("Agents");
-
-            ImGui::Text("Seek Mode: ");
-            ImGui::SameLine();
-
-            int seekModeIndex = (int)agents[0].seekMode;
-            if (ImGui::Button(seek_mode_strs[seekModeIndex])) {
-                seekModeIndex++;
-                if (seekModeIndex >= (int)agent_seek_mode::kCount) {
-                    seekModeIndex = 0;
-                }
-                for (auto& agent : agents) {
-                    agent.seekMode = (agent_seek_mode)seekModeIndex;
-                }
-            }
-
-            ImGui::End();
-        }
+        
 
         // TIME
         {
@@ -229,6 +226,58 @@ int main(int argc, char* argv[]) {
                 framesInSecond = 0;
                 std::cout << "FPS: " << fps << std::endl;
             }
+        }
+
+        // UI
+        {
+            ImGui::Begin("Agents");
+
+            ImGui::Text("Seek Mode: ");
+            ImGui::SameLine();
+
+            int seekModeIndex = (int)agentConfig.seekMode;
+            if (ImGui::Button(seek_mode_strs[seekModeIndex])) {
+                seekModeIndex++;
+                if (seekModeIndex >= (int)agent_seek_mode::kCount) {
+                    seekModeIndex = 0;
+                }
+                agentConfig.seekMode = (agent_seek_mode)seekModeIndex;
+            }
+
+            /*f32 maxSpeed = 10.f;
+            f32 maxAccel = 5.f;
+            f32 projectionDist = 4.f;
+            f32 projectionRadius = 1.f;
+            f32 wanderMult = 10.f;
+            f32 wanderInterval = 1 / 60.f;*/
+
+            ImGui::InputFloat("Max Speed:", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Max Acceleration:", &agentConfig.maxAccel, 0.1f, 1.f, 2);
+
+            ImGui::InputFloat("Separation Dist:", &agentConfig.separationDist, 0.1f, 1.f, 2);
+
+            ImGui::InputFloat("Movement Scalar:", &agentConfig.movementScalar, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Flow Scalar:", &agentConfig.flowScalar, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Separation Scalar:", &agentConfig.separationScalar, 0.1f, 1.f, 2);
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("Debug");
+
+            ImGui::Checkbox("Wander Projection", &debugConfig.showWanderProjection);
+            ImGui::Checkbox("Target", &debugConfig.showTarget);
+            ImGui::Checkbox("Separation Radius", &debugConfig.showSeparationRadius);
+            ImGui::Checkbox("Path", &debugConfig.showPath);
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("Stats");
+            
+            ImGui::Text("FPS: %d", fps);
+
+            ImGui::End();
         }
 
         // UPDATE
@@ -267,13 +316,6 @@ int main(int argc, char* argv[]) {
                     //cam.rotate(pitch);
                     cam.rotate(yaw);
                 }
-
-                if (input.get_key_down(SDL_SCANCODE_1)) {
-                    agent_seek_mode mode = (agent_seek_mode)(((int)(agents[0].seekMode) + 1) % (int)agent_seek_mode::kCount);
-                    for (auto& a : agents) {
-                        a.seekMode = mode;
-                    }
-                }
             }
 
             {
@@ -310,8 +352,8 @@ int main(int argc, char* argv[]) {
 
                 // TARGET
                 {
-                    auto wander = [dt](agent_data& agent) -> void {
-                        if (agent.position.len() > 30) {
+                    auto wander = [&agentConfig, dt](steer_agent& agent) -> void {
+                        if (agent.position.len2() > 10000) {
                             agent.target = vec2::ZERO;
                             return;
                         }
@@ -321,16 +363,16 @@ int main(int argc, char* argv[]) {
                             velocity = math::vec2_from_angle(Random::get(0.f, 360.f));
                         }
 
-                        agent.future = agent.position + vec2::normalize(velocity) * agent.projectionDist;
+                        agent.future = agent.position + vec2::normalize(velocity) * agentConfig.projectionDist;
 
                         agent.wanderTimer -= dt;
                         if (agent.wanderTimer <= 0) {
-                            agent.wanderAngle += Random::get<f32>(-agent.wanderMult, agent.wanderMult);
-                            agent.wanderTimer += agent.wanderInterval;
+                            agent.wanderAngle += Random::get<f32>(-agentConfig.wanderMult, agentConfig.wanderMult);
+                            agent.wanderTimer += agentConfig.wanderInterval;
                         }
 
-                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agent.projectionRadius;
-                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agent.projectionRadius;
+                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agentConfig.projectionRadius;
+                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agentConfig.projectionRadius;
                     };
 
                     vec2 velocity = agent.velocity;
@@ -341,7 +383,7 @@ int main(int argc, char* argv[]) {
                     vec2 nearest = agentPath.nearest(predicted, pathDir);
                     f32 pathDist = vec2::dist(nearest, agent.position);
 
-                    switch (agent.seekMode) {
+                    switch (agentConfig.seekMode) {
                     case agent_seek_mode::kWander:
                         wander(agent);
                         break;
@@ -355,7 +397,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 // SEPARATE
-                vec2 separation = [&agent, &agents]() -> vec2 {
+                vec2 separation = [&agent, &agents, &agentConfig]() -> vec2 {
                     vec2 sum = vec2::ZERO;
                     int count = 0;
                     for (auto& other : agents) {
@@ -365,7 +407,7 @@ int main(int argc, char* argv[]) {
 
                         vec2 delta = agent.position - other.position;
                         f32 d = delta.len();
-                        if (d > 0 && d < 4.f) {
+                        if (d > 0 && d < agentConfig.separationDist) {
                             sum += vec2::normalize(delta) / d;
                             ++count;
                         }
@@ -374,7 +416,7 @@ int main(int argc, char* argv[]) {
                     if (count > 0) {
                         sum /= count;
                         sum.normalize();
-                        sum *= agent.maxSpeed;
+                        sum *= agentConfig.maxSpeed;
                         return sum;
                     }
                     else {
@@ -383,7 +425,7 @@ int main(int argc, char* argv[]) {
                 }();
 
                 // SEEK
-                [&agent, &flowField, &agentPath, &separation, dt] {
+                [&agent, &flowField, &agentPath, &separation, &agentConfig, dt] {
                     vec2 targetDir;
                     f32 targetDist;
 
@@ -394,37 +436,17 @@ int main(int argc, char* argv[]) {
                     vec2 desired;
                     const f32 BORDER_SIZE = 128.f;
 
-                    //if (agent.position.x < -20) {
-                    //    desired = vec2(agent.maxSpeed, agent.velocity.y);
-                    //}
-                    //else if (agent.position.x > 20) {
-                    //    desired = vec2(-agent.maxSpeed, agent.velocity.y);
-                    //}
-                    //else if (agent.position.y < -12) {
-                    //    desired = vec2(agent.velocity.x, agent.maxSpeed);
-                    //}
-                    //else if (agent.position.y > 12) {
-                    //    desired = vec2(agent.velocity.x, -agent.maxSpeed);
-                    //}
-                    //else {
-                    //}
-
-                    //vec2 wander = targetDir * math::clamp01(targetDist / 100) * agent.maxSpeed;
                     vec2 flow = flowField.get(agent.position);
-                    //desired = flow + separation;
-                    //desired = flow;
-                    //desired = wander + separation;
-
                     vec2 movement = targetDir * math::clamp01(targetDist / 40);
 
                     desired = flow + movement;
 
-                    desired = 1.f * movement + 0.01f * flow + 0.01f * separation;
+                    desired = agentConfig.movementScalar * movement + agentConfig.flowScalar * flow + agentConfig.separationScalar * separation;
                     desired.normalize();
-                    desired *= agent.maxSpeed;
+                    desired *= agentConfig.maxSpeed;
 
                     vec2 steer = desired - agent.velocity;
-                    steer.limit(agent.maxAccel);
+                    steer.limit(agentConfig.maxAccel);
 
                     agent.body->ApplyForce(steer, vec2::ZERO, true);
                 }();
@@ -446,33 +468,16 @@ int main(int argc, char* argv[]) {
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec4(0, 1, 0, 1));
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec4(0, 0, 1, 1));
 
-            //// debug flow field
-            //for (int x = 0; x < flowField.width(); ++x) {
-            //    for (int y = 0; y < flowField.height(); ++y) {
-            //        vec2 v = flowField.get(x, y);
-            //        render_direction(renderer, flowField.cell_center(x, y), v, flowField.cell_size());
-            //    }
-            //}
-
             //// debug path
-            draw.set_color(1, 1, 0);
-            for (int i = 0; i < agentPath.path_points().size(); ++i) {
-                vec2 pt1 = agentPath.path_points()[i];
-                vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
-                draw.line(pt1, pt2);
+            if (debugConfig.showPath) {
+                draw.set_color(1, 1, 0);
+                for (int i = 0; i < agentPath.path_points().size(); ++i) {
+                    vec2 pt1 = agentPath.path_points()[i];
+                    vec2 pt2 = agentPath.path_points()[(i + 1) % agentPath.path_points().size()];
+                    draw.line(pt1, pt2);
+                }
             }
 
-            ////{
-            ////    vec2 dir;
-            ////    vec2 nearest = agentPath.nearest(agents[0].future, dir);
-            ////    SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
-            ////    int sx, sy;
-            ////    world_to_screen(nearest.x, nearest.y, sx, sy);
-            ////    render_circle(renderer, sx, sy, 8);
-            ////}
-
-
-            draw.set_color(0, 1, 0);
             for (const auto& agent : agents) {
                 vec2 points[3] = {
                     .5f * math::vec2_from_angle(agent.rotation) + agent.position,
@@ -480,7 +485,20 @@ int main(int argc, char* argv[]) {
                     .5f * math::vec2_from_angle(agent.rotation + 135) + agent.position
                 };
 
+                draw.set_color(0, 1, 0);
                 draw.lines(points, 3);
+
+                if (debugConfig.showWanderProjection) {
+                    draw.set_color_bytes(179, 120, 210);
+                    draw.line(agent.position, agent.future);
+                    draw.line(agent.future, agent.target);
+                    draw.circle(agent.future, agentConfig.projectionRadius);
+                }
+
+                if (debugConfig.showSeparationRadius) {
+                    draw.set_color_bytes(100, 149, 247);
+                    draw.circle(agent.position, agentConfig.separationDist);
+                }
             }
 
             ImGui::Render();
@@ -491,23 +509,6 @@ int main(int argc, char* argv[]) {
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
             SDL_GL_SwapWindow(window);
-
-            //// render FPS
-            //{
-            //    char buffer[256] = { 0 };
-            //    snprintf(buffer, 16, "FPS: %d", fps);
-            //    SDL_Color white = { 255, 255, 255, 255 };
-            //    SDL_Surface* fpsTextSurface = TTF_RenderText_Solid(debugFont, buffer, white);
-            //    SDL_Texture* fpsTexture = SDL_CreateTextureFromSurface(renderer, fpsTextSurface);
-
-            //    SDL_Rect destRect = { 0, 0, 100, 20 };
-            //    SDL_RenderCopy(renderer, fpsTexture, nullptr, &destRect);
-
-            //    SDL_DestroyTexture(fpsTexture);
-            //    SDL_FreeSurface(fpsTextSurface);
-            //}
-
-            //SDL_RenderPresent(renderer);
         }
     }
 
