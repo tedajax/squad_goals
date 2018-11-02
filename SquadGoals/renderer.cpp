@@ -158,7 +158,7 @@ void renderer::render(const camera& cam) {
     glUseProgram(programId);
 
     auto model = glm::mat4(1.f);
-    auto view = cam.look_at();
+    auto view = cam.view();
     auto projection = cam.projection();
 
     glm::mat4 mvp = projection * view * model;

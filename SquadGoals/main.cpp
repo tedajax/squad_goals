@@ -47,8 +47,9 @@ struct agent_config {
     
     f32 maxSpeed = 10.f;
     f32 maxAccel = 5.f;
+    
     f32 wanderProjectionDist = 4.f;
-    f32 wonderProjectionRadius = 1.f;
+    f32 wanderProjectionRadius = 1.f;
     
     f32 wanderAngleRange = 10.f;
     f32 wanderInterval = 1 / 60.f;
@@ -107,7 +108,7 @@ int main(int argc, char* argv[]) {
 
     TTF_Font* debugFont = TTF_OpenFont("assets/prstartk.ttf", 16);
 
-    SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
+    SDL_Window* window = SDL_CreateWindow("Squad Goals", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1920, 1080, SDL_WINDOW_OPENGL);
     
     renderer r;
     r.init(window);
@@ -126,7 +127,7 @@ int main(int argc, char* argv[]) {
     flat_draw_context draw(r);
 
     camera cam;
-    cam.position = glm::vec3(0.f, 20.f, 0.f);
+    //cam.position = glm::vec3(0.f, 20.f, 0.f);
 
     std::vector<vec2> pathPts;
     const int ptCount = 30;
@@ -235,6 +236,17 @@ int main(int argc, char* argv[]) {
 
         // UI
         {
+            ImGui::Begin("Camera");
+
+            ImGui::InputFloat("theta", &cam.theta);
+            ImGui::InputFloat("phi", &cam.phi);
+            ImGui::InputFloat("rho", &cam.rho);
+
+            ImGui::InputFloat3("position", &cam.position[0], 2);
+
+            ImGui::End();
+        }
+        {
             ImGui::Begin("Agents");
 
             ImGui::Text("Seek Mode: ");
@@ -267,6 +279,20 @@ int main(int argc, char* argv[]) {
 
             ImGui::InputFloat("Path Distance", &agentConfig.pathFollowDist, 0.1f, 1.f, 2);
 
+
+            /*f32 wanderAngleRange = 10.f;
+            f32 wanderInterval = 1 / 60.f;*/
+
+            ImGui::Separator();
+
+            ImGui::InputFloat("Wander Proj Dist", &agentConfig.wanderProjectionDist, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Wander Proj Radius", &agentConfig.wanderProjectionRadius, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Wonder Angle Range", &agentConfig.wanderAngleRange, 0.1f, 1.f, 2);
+
+            int ms = (int)(agentConfig.wanderInterval * 1000.f);
+            ImGui::InputInt("Wonder Drift Interval (ms)", &ms);
+            agentConfig.wanderInterval = ms / 1000.f;
+
             ImGui::End();
         }
         {
@@ -293,35 +319,33 @@ int main(int argc, char* argv[]) {
             {
                 const f32 speed = 5.f * dt;
                 if (input.get_key(SDL_SCANCODE_D)) {
-                    cam.move(glm::vec3(speed, 0, 0));
+                    cam.move_relative(glm::vec3(speed, 0, 0));
                 }
 
                 if (input.get_key(SDL_SCANCODE_A)) {
-                    cam.move(glm::vec3(-speed, 0, 0));
+                    cam.move_relative(glm::vec3(-speed, 0, 0));
                 }
 
                 if (input.get_key(SDL_SCANCODE_W)) {
-                    cam.move(glm::vec3(0, 0, -speed));
+                    cam.move_relative(glm::vec3(0, 0, -speed));
                 }
 
                 if (input.get_key(SDL_SCANCODE_S)) {
-                    cam.move(glm::vec3(0, 0, speed));
+                    cam.move_relative(glm::vec3(0, 0, speed));
                 }
 
                 if (input.get_key(SDL_SCANCODE_Q)) {
-                    cam.move(glm::vec3(0, -speed, 0));
+                    cam.rho += dt;
                 }
 
                 if (input.get_key(SDL_SCANCODE_E)) {
-                    cam.move(glm::vec3(0, speed, 0));
+                    cam.rho -= dt;
                 }
 
                 if ((mb & 4) != 0) {
-                    printf("%.3f, %.3f\n", mx / 32.f, my / 32.f);
-                    glm::quat pitch = glm::angleAxis(-my / 64.f, glm::vec3(1, 0, 0));
-                    glm::quat yaw = glm::angleAxis(-mx / 64.f, glm::vec3(0, 1, 0));
-                    //cam.rotate(pitch);
-                    cam.rotate(yaw);
+                    f32 pitch = -my / 8.f;
+                    f32 yaw = mx / 8.f;
+                    cam.orbit(pitch, yaw);
                 }
             }
 
@@ -378,8 +402,8 @@ int main(int argc, char* argv[]) {
                             agent.wanderTimer += agentConfig.wanderInterval;
                         }
 
-                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agentConfig.wonderProjectionRadius;
-                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agentConfig.wonderProjectionRadius;
+                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agentConfig.wanderProjectionRadius;
+                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agentConfig.wanderProjectionRadius;
                     };
 
                     vec2 velocity = agent.velocity;
@@ -501,8 +525,8 @@ int main(int argc, char* argv[]) {
                 if (debugConfig.showWanderProjection) {
                     draw.set_color_bytes(179, 120, 210);
                     draw.line(agent.position, agent.future);
-                    draw.line(agent.future, agent.future + math::vec2_from_angle(agent.wanderAngle) * agentConfig.wonderProjectionRadius);
-                    draw.circle(agent.future, agentConfig.wonderProjectionRadius);
+                    draw.line(agent.future, agent.future + math::vec2_from_angle(agent.wanderAngle) * agentConfig.wanderProjectionRadius);
+                    draw.circle(agent.future, agentConfig.wanderProjectionRadius);
                 }
 
                 if (debugConfig.showTarget) {
