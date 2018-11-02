@@ -44,17 +44,22 @@ struct debug_config {
 
 struct agent_config {
     agent_seek_mode seekMode = agent_seek_mode::kFollowPath;
+    
     f32 maxSpeed = 10.f;
     f32 maxAccel = 5.f;
-    f32 projectionDist = 4.f;
-    f32 projectionRadius = 1.f;
-    f32 wanderMult = 10.f;
+    f32 wanderProjectionDist = 4.f;
+    f32 wonderProjectionRadius = 1.f;
+    
+    f32 wanderAngleRange = 10.f;
     f32 wanderInterval = 1 / 60.f;
+    
     f32 separationDist = 2.f;
 
     f32 movementScalar = 1.f;
     f32 flowScalar = 0.f;
     f32 separationScalar = 0.1f;
+
+    f32 pathFollowDist = 0.5f;
 };
 
 struct steer_agent {
@@ -134,7 +139,7 @@ int main(int argc, char* argv[]) {
         pathPts.push_back(vec2(math::cos(b) * radX, math::sin(b) * radY));
     }
 
-    path agentPath(path_dir::kCW, 0.5f, pathPts.data(), pathPts.size());
+    path agentPath(path_dir::kCW, pathPts.data(), pathPts.size());
 
     b2World world(vec2::ZERO);
 
@@ -251,14 +256,16 @@ int main(int argc, char* argv[]) {
             f32 wanderMult = 10.f;
             f32 wanderInterval = 1 / 60.f;*/
 
-            ImGui::InputFloat("Max Speed:", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Max Acceleration:", &agentConfig.maxAccel, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Max Speed", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Max Acceleration", &agentConfig.maxAccel, 0.1f, 1.f, 2);
 
-            ImGui::InputFloat("Separation Dist:", &agentConfig.separationDist, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Separation Dist", &agentConfig.separationDist, 0.1f, 1.f, 2);
 
-            ImGui::InputFloat("Movement Scalar:", &agentConfig.movementScalar, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Flow Scalar:", &agentConfig.flowScalar, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Separation Scalar:", &agentConfig.separationScalar, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Movement Scalar", &agentConfig.movementScalar, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Flow Scalar", &agentConfig.flowScalar, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Separation Scalar", &agentConfig.separationScalar, 0.1f, 1.f, 2);
+
+            ImGui::InputFloat("Path Distance", &agentConfig.pathFollowDist, 0.1f, 1.f, 2);
 
             ImGui::End();
         }
@@ -363,16 +370,16 @@ int main(int argc, char* argv[]) {
                             velocity = math::vec2_from_angle(Random::get(0.f, 360.f));
                         }
 
-                        agent.future = agent.position + vec2::normalize(velocity) * agentConfig.projectionDist;
+                        agent.future = agent.position + vec2::normalize(velocity) * agentConfig.wanderProjectionDist;
 
                         agent.wanderTimer -= dt;
                         if (agent.wanderTimer <= 0) {
-                            agent.wanderAngle += Random::get<f32>(-agentConfig.wanderMult, agentConfig.wanderMult);
+                            agent.wanderAngle += Random::get<f32>(-agentConfig.wanderAngleRange, agentConfig.wanderAngleRange);
                             agent.wanderTimer += agentConfig.wanderInterval;
                         }
 
-                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agentConfig.projectionRadius;
-                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agentConfig.projectionRadius;
+                        agent.target.x = agent.future.x + math::cos(agent.wanderAngle) * agentConfig.wonderProjectionRadius;
+                        agent.target.y = agent.future.y + math::sin(agent.wanderAngle) * agentConfig.wonderProjectionRadius;
                     };
 
                     vec2 velocity = agent.velocity;
@@ -388,9 +395,12 @@ int main(int argc, char* argv[]) {
                         wander(agent);
                         break;
                     case agent_seek_mode::kFollowPath:
-                        if (pathDist > agentPath.path_width()) {
+                        if (pathDist > agentConfig.pathFollowDist) {
                             agent.target = nearest + pathDir * 1.f;
                             agent.future = predicted;
+                        }
+                        else {
+                            wander(agent);
                         }
                         break;
                     }
@@ -491,8 +501,13 @@ int main(int argc, char* argv[]) {
                 if (debugConfig.showWanderProjection) {
                     draw.set_color_bytes(179, 120, 210);
                     draw.line(agent.position, agent.future);
-                    draw.line(agent.future, agent.target);
-                    draw.circle(agent.future, agentConfig.projectionRadius);
+                    draw.line(agent.future, agent.future + math::vec2_from_angle(agent.wanderAngle) * agentConfig.wonderProjectionRadius);
+                    draw.circle(agent.future, agentConfig.wonderProjectionRadius);
+                }
+
+                if (debugConfig.showTarget) {
+                    draw.set_color_bytes(31, 255, 31);
+                    draw.line(agent.position, agent.target);
                 }
 
                 if (debugConfig.showSeparationRadius) {

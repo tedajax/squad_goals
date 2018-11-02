@@ -1,13 +1,13 @@
 #include "path.h"
 
-path::path(path_dir dir, f32 width, std::initializer_list<vec2> pts)
-    : width(width), dir(dir)
+path::path(path_dir dir, std::initializer_list<vec2> pts)
+    : dir(dir)
 {
     this->points.insert(this->points.end(), pts.begin(), pts.end());
 }
 
-path::path(path_dir dir, f32 width, const vec2* pts, size_t count)
-    : width(width), dir(dir)
+path::path(path_dir dir, const vec2* pts, size_t count)
+    : dir(dir)
 {
     this->points.insert(this->points.end(), pts, pts + count);
 }
