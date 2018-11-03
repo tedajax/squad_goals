@@ -21,6 +21,11 @@ void flow_field::perlin_angles(const perlin_gen& perlin, f32 scale, f32 z /* = 0
     }
 }
 
+vec2 flow_field::perlin_get(const perlin_gen& perlin, f32 x, f32 y, f32 z /* = 0.f */) {
+    f32 v = perlin.noise(x, y, z);
+    return math::vec2_from_angle(v * 720.f);
+}
+
 void flow_field::set(int cellX, int cellY, vec2 vec) {
     int i = index(cellX, cellY);
     if (i >= 0) {

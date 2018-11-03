@@ -1,7 +1,7 @@
 #include "flatdraw.h"
 
 void flat_draw_context::line(const vec2& from, const vec2& to) {
-    r.line(from, to, color);
+    r.line(glm::vec3(from.x, layer, from.y), glm::vec3(to.x, layer, to.y), color);
 }
 
 void flat_draw_context::lines(const vec2* points, size_t count) {

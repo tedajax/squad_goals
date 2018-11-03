@@ -12,6 +12,7 @@ public:
     vec2 get(int cx, int cy) const;
     vec2 get(vec2 pos) const;
     vec2 cell_center(int cx, int cy);
+    static vec2 perlin_get(const perlin_gen& perlin, f32 x, f32 y, f32 z = 0.f);
 
     int width() const;
     int height() const;

@@ -27,12 +27,14 @@
 enum class agent_seek_mode {
     kWander,
     kFollowPath,
+    kReturn,
     kCount,
 };
 
 const char* seek_mode_strs[(int)agent_seek_mode::kCount] {
     "wander",
     "follow path",
+    "return"
 };
 
 struct debug_config {
@@ -40,6 +42,7 @@ struct debug_config {
     bool showTarget = false;
     bool showSeparationRadius = false;
     bool showPath = false;
+    bool showFlowField = false;
 };
 
 struct agent_config {
@@ -51,8 +54,8 @@ struct agent_config {
     f32 wanderProjectionDist = 4.f;
     f32 wanderProjectionRadius = 1.f;
     
-    f32 wanderAngleRange = 10.f;
-    f32 wanderInterval = 1 / 60.f;
+    f32 wanderAngleRange = 4.f;
+    f32 wanderInterval = 1 / 30.f;
     
     f32 separationDist = 2.f;
 
@@ -60,7 +63,7 @@ struct agent_config {
     f32 flowScalar = 0.f;
     f32 separationScalar = 0.1f;
 
-    f32 pathFollowDist = 0.5f;
+    f32 pathFollowDist = 1.5f;
 };
 
 struct steer_agent {
@@ -76,6 +79,11 @@ struct steer_agent {
     f32 wanderTimer = 0.f;
 
     b2Body* body;
+};
+
+struct world_data {
+    f32 flowDivisor = 32.f;
+    f32 flowDepth = 0.f;
 };
 
 static void init_agent(steer_agent& ag, b2World& world) {
@@ -98,6 +106,8 @@ static void init_agent(steer_agent& ag, b2World& world) {
 }
 
 using Random = effolkronium::random_static;
+
+vec2 ray_ground_intersection(const glm::vec3& origin, const glm::vec3& direction);
 
 int main(int argc, char* argv[]) {
     Random::seed(1);
@@ -127,12 +137,13 @@ int main(int argc, char* argv[]) {
     flat_draw_context draw(r);
 
     camera cam;
+    camera camCopy = cam;
     //cam.position = glm::vec3(0.f, 20.f, 0.f);
 
     std::vector<vec2> pathPts;
-    const int ptCount = 30;
+    const int ptCount = 10;
     const f32 delta = 360.f / ptCount;
-    const f32 radX = 20, radY = 10;
+    const f32 radX = 40, radY = 20;
     for (int i = 0; i < ptCount; ++i) {
         f32 a = delta * i;
         f32 b = delta * (i + 1);
@@ -142,7 +153,7 @@ int main(int argc, char* argv[]) {
 
     path agentPath(path_dir::kCW, pathPts.data(), pathPts.size());
 
-    b2World world(vec2::ZERO);
+    b2World physicsWorld(vec2::ZERO);
 
     //box2dSdlDebugDraw sdlDebugDraw(renderer);
     //world.SetDebugDraw(&sdlDebugDraw);
@@ -155,14 +166,15 @@ int main(int argc, char* argv[]) {
 
     debug_config debugConfig;
     agent_config agentConfig;
+    world_data world;
 
     std::vector<steer_agent> agents;
-    flow_field flowField(40.f, 36.f, 1.f, -20.f, -18.f);
+    steer_agent* selected = nullptr;
+    int selectedIndex = -1;
 
     perlin_gen perlin(10000);
-    flowField.perlin_angles(perlin, 1.f);
 
-    const int AGENT_COUNT = 40;
+    const int AGENT_COUNT = 80;
 
     for (int i = 0; i < AGENT_COUNT; ++i) {
         steer_agent ag;
@@ -171,7 +183,7 @@ int main(int argc, char* argv[]) {
         ag.target.x = (f32)Random::get(-20, 20);
         ag.target.y = (f32)Random::get(-11, 11);
         ag.wanderAngle = Random::get(0.f, 360.f);
-        init_agent(ag, world);
+        init_agent(ag, physicsWorld);
         agents.push_back(ag);
     }
 
@@ -187,6 +199,16 @@ int main(int argc, char* argv[]) {
 
     bool isRunning = true;
     while (isRunning) {
+        if (selectedIndex >= 0) {
+            selected = &agents[selectedIndex];
+        }
+        else {
+            selected = nullptr;
+        }
+
+        int mdx = 0, mdy = 0, mdz = 0;
+        int mx = 0, my = 0;
+
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL2_ProcessEvent(&event);
@@ -198,19 +220,23 @@ int main(int argc, char* argv[]) {
             case SDL_QUIT:
                 isRunning = false;
                 break;
+            case SDL_MOUSEWHEEL:
+                mdz = event.wheel.y;
+                printf("%d\n", mdz);
+                break;
             }
         }
+
+        SDL_GetMouseState(&mx, &my);
+        vec2 mousePoint = vec2((mx / 1920.f) * 2.f - 1.f, 1.f - (my / 1080.f) * 2.f);
+
+        u32 mb = SDL_GetRelativeMouseState(&mdx, &mdy);
 
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame(window);
         ImGui::NewFrame();
 
         input.update();
-
-        int mx, my;
-        u32 mb = SDL_GetRelativeMouseState(&mx, &my);
-
-        
 
         // TIME
         {
@@ -242,7 +268,9 @@ int main(int argc, char* argv[]) {
             ImGui::InputFloat("phi", &cam.phi);
             ImGui::InputFloat("rho", &cam.rho);
 
-            ImGui::InputFloat3("position", &cam.position[0], 2);
+            ImGui::InputFloat3("position", &cam.target[0], 2);
+
+            ImGui::SliderInt("selected", &selectedIndex, -1, AGENT_COUNT - 1);
 
             ImGui::End();
         }
@@ -270,18 +298,14 @@ int main(int argc, char* argv[]) {
 
             ImGui::InputFloat("Max Speed", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
             ImGui::InputFloat("Max Acceleration", &agentConfig.maxAccel, 0.1f, 1.f, 2);
-
             ImGui::InputFloat("Separation Dist", &agentConfig.separationDist, 0.1f, 1.f, 2);
-
-            ImGui::InputFloat("Movement Scalar", &agentConfig.movementScalar, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Flow Scalar", &agentConfig.flowScalar, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Separation Scalar", &agentConfig.separationScalar, 0.1f, 1.f, 2);
-
             ImGui::InputFloat("Path Distance", &agentConfig.pathFollowDist, 0.1f, 1.f, 2);
 
+            ImGui::Separator();
 
-            /*f32 wanderAngleRange = 10.f;
-            f32 wanderInterval = 1 / 60.f;*/
+            ImGui::SliderFloat("Movement Scalar", &agentConfig.movementScalar, 0.f, 1.f);
+            ImGui::SliderFloat("Flow Scalar", &agentConfig.flowScalar, 0.f, 1.f);
+            ImGui::SliderFloat("Separation Scalar", &agentConfig.separationScalar, 0.f, 1.f);
 
             ImGui::Separator();
 
@@ -296,12 +320,22 @@ int main(int argc, char* argv[]) {
             ImGui::End();
         }
         {
+            ImGui::Begin("World");
+
+            ImGui::InputFloat("Flow Divisor", &world.flowDivisor, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Flow Depth", &world.flowDepth, 0.1f, 1.f, 2);
+
+
+            ImGui::End();
+        }
+        {
             ImGui::Begin("Debug");
 
             ImGui::Checkbox("Wander Projection", &debugConfig.showWanderProjection);
             ImGui::Checkbox("Target", &debugConfig.showTarget);
             ImGui::Checkbox("Separation Radius", &debugConfig.showSeparationRadius);
             ImGui::Checkbox("Path", &debugConfig.showPath);
+            ImGui::Checkbox("Flow Field", &debugConfig.showFlowField);
 
             ImGui::End();
         }
@@ -309,6 +343,13 @@ int main(int argc, char* argv[]) {
             ImGui::Begin("Stats");
             
             ImGui::Text("FPS: %d", fps);
+
+            glm::vec3 origin, dir;
+            cam.get_screen_ray(mousePoint, origin, dir);
+            ImGui::InputFloat3("Origin", &origin[0], 4);
+            ImGui::InputFloat3("Direction", &dir[0], 4);
+            ImGui::InputFloat3("Position", &cam.position()[0], 4);
+            ImGui::InputFloat2("Mouse Pos", &mousePoint.x, 2);
 
             ImGui::End();
         }
@@ -334,18 +375,28 @@ int main(int argc, char* argv[]) {
                     cam.move_relative(glm::vec3(0, 0, speed));
                 }
 
+                if (selected != nullptr) {
+                    cam.target = glm::vec3(selected->position.x, 0.f, selected->position.y);
+                }
+
                 if (input.get_key(SDL_SCANCODE_Q)) {
-                    cam.rho += dt;
+                    cam.rho += 10 * dt;
                 }
 
                 if (input.get_key(SDL_SCANCODE_E)) {
-                    cam.rho -= dt;
+                    cam.rho -= 10 * dt;
                 }
 
+                cam.rho += -mdz * 2;
+
                 if ((mb & 4) != 0) {
-                    f32 pitch = -my / 8.f;
-                    f32 yaw = mx / 8.f;
+                    f32 pitch = -mdy / 8.f;
+                    f32 yaw = mdx / 8.f;
                     cam.orbit(pitch, yaw);
+                    SDL_SetRelativeMouseMode(SDL_TRUE);
+                }
+                else {
+                    SDL_SetRelativeMouseMode(SDL_FALSE);
                 }
             }
 
@@ -374,7 +425,6 @@ int main(int argc, char* argv[]) {
             }
 
             a += 0.1f * dt;
-            flowField.perlin_angles(perlin, 1.f + math::ping_pong(a, 3.f), math::ping_pong(a, 100.f));
 
 
             for (auto& agent : agents) {
@@ -384,11 +434,6 @@ int main(int argc, char* argv[]) {
                 // TARGET
                 {
                     auto wander = [&agentConfig, dt](steer_agent& agent) -> void {
-                        if (agent.position.len2() > 10000) {
-                            agent.target = vec2::ZERO;
-                            return;
-                        }
-
                         vec2 velocity = agent.velocity;
                         if (agent.velocity == vec2::ZERO) {
                             velocity = math::vec2_from_angle(Random::get(0.f, 360.f));
@@ -427,6 +472,9 @@ int main(int argc, char* argv[]) {
                             wander(agent);
                         }
                         break;
+                    case agent_seek_mode::kReturn:
+                        agent.target = vec2::ZERO;
+                        break;
                     }
                 }
 
@@ -459,7 +507,7 @@ int main(int argc, char* argv[]) {
                 }();
 
                 // SEEK
-                [&agent, &flowField, &agentPath, &separation, &agentConfig, dt] {
+                [&agent, &agentPath, &perlin, &world, &separation, &agentConfig, dt] {
                     vec2 targetDir;
                     f32 targetDist;
 
@@ -470,7 +518,7 @@ int main(int argc, char* argv[]) {
                     vec2 desired;
                     const f32 BORDER_SIZE = 128.f;
 
-                    vec2 flow = flowField.get(agent.position);
+                    vec2 flow = flow_field::perlin_get(perlin, agent.position.x / world.flowDivisor, agent.position.y / world.flowDivisor, world.flowDepth);
                     vec2 movement = targetDir * math::clamp01(targetDist / 40);
 
                     desired = flow + movement;
@@ -492,7 +540,7 @@ int main(int argc, char* argv[]) {
                 }();
             }
 
-            world.Step(dt, velocityIterations, positionIterations);
+            physicsWorld.Step(dt, velocityIterations, positionIterations);
         }
 
         // RENDER
@@ -501,6 +549,32 @@ int main(int argc, char* argv[]) {
             r.line(glm::vec3(0, 0, 0), glm::vec3(1, 0, 0), glm::vec4(1, 0, 0, 1));
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 1, 0), glm::vec4(0, 1, 0, 1));
             r.line(glm::vec3(0, 0, 0), glm::vec3(0, 0, -1), glm::vec4(0, 0, 1, 1));
+
+            // graph
+            draw.set_layer(-0.01f);
+            f32 left = math::floor(cam.target.x - 50.f);
+            f32 right = math::ceil(cam.target.x + 50.f);
+            f32 front = math::floor(cam.target.z - 50.f);
+            f32 back = math::ceil(cam.target.z + 50.f);
+            for (f32 x = left; x < right; x++) {
+                if ((int)x % 5 == 0) {
+                    draw.set_color_bytes(223, 223, 223);
+                }
+                else {
+                    draw.set_color_bytes(63, 63, 63);
+                }
+                draw.line(vec2(x, front), vec2(x, back));
+            }
+            for (f32 y = front; y < back; y++) {
+                if ((int)y % 5 == 0) {
+                    draw.set_color_bytes(223, 223, 223);
+                }
+                else {
+                    draw.set_color_bytes(63, 63, 63);
+                }
+                draw.line(vec2(left, y), vec2(right, y));
+            }
+            draw.set_layer(0);
 
             //// debug path
             if (debugConfig.showPath) {
@@ -512,6 +586,18 @@ int main(int argc, char* argv[]) {
                 }
             }
 
+            // flow field
+            if (debugConfig.showFlowField) {
+                draw.set_color_bytes(255, 0, 0);
+                for (f32 x = math::floor(cam.target.x - 20.f); x < math::ceil(cam.target.x + 20.f); x++) {
+                    for (f32 y = math::floor(cam.target.z - 20.f); y < math::ceil(cam.target.z + 20.f); y++) {
+                        vec2 dir = flow_field::perlin_get(perlin, x / world.flowDivisor, y / world.flowDivisor, world.flowDepth);
+                        vec2 pos = vec2(x, y);
+                        draw.line(pos + dir * 0.5f, pos - dir * 0.5f);
+                    }
+                }
+            }
+
             for (const auto& agent : agents) {
                 vec2 points[3] = {
                     .5f * math::vec2_from_angle(agent.rotation) + agent.position,
@@ -519,7 +605,12 @@ int main(int argc, char* argv[]) {
                     .5f * math::vec2_from_angle(agent.rotation + 135) + agent.position
                 };
 
-                draw.set_color(0, 1, 0);
+                if (selected == &agent) {
+                    draw.set_color(0.8f, 1, 0.8f);
+                }
+                else {
+                    draw.set_color(0, 1, 0);
+                }
                 draw.lines(points, 3);
 
                 if (debugConfig.showWanderProjection) {
@@ -538,6 +629,13 @@ int main(int argc, char* argv[]) {
                     draw.set_color_bytes(100, 149, 247);
                     draw.circle(agent.position, agentConfig.separationDist);
                 }
+
+                glm::vec3 origin, dir;
+                cam.get_screen_ray(mousePoint, origin, dir);
+
+                vec2 ground = ray_ground_intersection(cam.position(), dir);
+                draw.set_color_bytes(0, 255, 255);
+                draw.circle(ground, 0.5f);
             }
 
             ImGui::Render();
@@ -562,4 +660,16 @@ int main(int argc, char* argv[]) {
     SDL_Quit();
 
     return 0;
+}
+
+vec2 ray_ground_intersection(const glm::vec3& origin, const glm::vec3& direction) {
+    f32 denom = glm::dot(direction, glm::vec3(0, 1, 0));
+    if (denom < -1e-6) {
+        f32 t = glm::dot(-origin, glm::vec3(0, 1, 0));
+        if (t < 0) {
+            glm::vec3 pt = origin + direction * t;
+            return vec2(pt.x, pt.z);
+        }
+    }
+    return vec2(0, 0);
 }
