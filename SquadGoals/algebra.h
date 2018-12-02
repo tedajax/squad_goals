@@ -324,6 +324,10 @@ namespace math {
         return std::roundf(v);
     }
 
+    inline f32 sqrt(f32 v) {
+        return std::sqrtf(v);
+    }
+
     inline int floor_int(f32 v) {
         return (int)floor(v);
     }
@@ -471,3 +475,42 @@ namespace math {
         return smooth_damp(from, target, velocity, time, maxSpeed, dt);
     }
 }
+
+struct aabb {
+    vec2 botLeft;
+    vec2 topRight;
+
+    inline f32 left() const { return botLeft.x; }
+    inline f32 right() const { return topRight.x; }
+    inline f32 top() const { return topRight.y; }
+    inline f32 bottom() const { return botLeft.y; }
+    inline vec2 center() const { return (botLeft + topRight) / 2; }
+    inline vec2 dimensions() const { return vec2(math::abs(topRight.x - botLeft.x), math::abs(topRight.y - botLeft.y)); }
+
+    inline bool contains(vec2 pt) {
+        return pt.x >= left() && pt.x <= right() && pt.y >= bottom() && pt.y <= top();
+    }
+
+    inline void move(vec2 amount) {
+        botLeft += amount;
+        topRight += amount;
+    }
+
+    inline static f32 distance(const aabb& a, const aabb& b) {
+        f32 dy1 = math::max(a.bottom() - b.top(), 0.f);
+        f32 dy2 = math::max(b.bottom() - a.top(), 0.f);
+        f32 dy = math::max(dy1, dy2);
+
+        f32 dx1 = math::max(a.left() - b.right(), 0.f);
+        f32 dx2 = math::max(b.left() - a.right(), 0.f);
+        f32 dx = math::max(dx1, dx2);
+
+        return math::sqrt(dx * dx + dy * dy);
+    }
+
+    inline static aabb create_from_center(vec2 center, vec2 dimensions) {
+        auto half = dimensions / 2;
+        return aabb{ center - half, center + half };
+    }
+};
+

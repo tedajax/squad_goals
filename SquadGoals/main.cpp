@@ -108,6 +108,7 @@ static void init_agent(steer_agent& ag, b2World& world) {
 using Random = effolkronium::random_static;
 
 vec2 ray_ground_intersection(const glm::vec3& origin, const glm::vec3& direction);
+void draw_aabb(flat_draw_context& ctx, const aabb& box);
 
 int main(int argc, char* argv[]) {
     Random::seed(1);
@@ -141,9 +142,9 @@ int main(int argc, char* argv[]) {
     //cam.position = glm::vec3(0.f, 20.f, 0.f);
 
     std::vector<vec2> pathPts;
-    const int ptCount = 10;
+    const int ptCount = 20;
     const f32 delta = 360.f / ptCount;
-    const f32 radX = 40, radY = 20;
+    const f32 radX = 12, radY = 9;
     for (int i = 0; i < ptCount; ++i) {
         f32 a = delta * i;
         f32 b = delta * (i + 1);
@@ -174,7 +175,7 @@ int main(int argc, char* argv[]) {
 
     perlin_gen perlin(10000);
 
-    const int AGENT_COUNT = 80;
+    const int AGENT_COUNT = 10;
 
     for (int i = 0; i < AGENT_COUNT; ++i) {
         steer_agent ag;
@@ -194,8 +195,10 @@ int main(int argc, char* argv[]) {
 
     int framesInSecond = 0;
     f32 dt = 0.f;
+    f32 time = 0.f;
 
-    f32 a = 0.f;
+    aabb baseRect{ vec2(-5, -5), vec2(5, 5) };
+    aabb moveRect{ vec2(-1, -1), vec2(1, 1) };
 
     bool isRunning = true;
     while (isRunning) {
@@ -222,7 +225,6 @@ int main(int argc, char* argv[]) {
                 break;
             case SDL_MOUSEWHEEL:
                 mdz = event.wheel.y;
-                printf("%d\n", mdz);
                 break;
             }
         }
@@ -231,10 +233,6 @@ int main(int argc, char* argv[]) {
         vec2 mousePoint = vec2((mx / 1920.f) * 2.f - 1.f, 1.f - (my / 1080.f) * 2.f);
 
         u32 mb = SDL_GetRelativeMouseState(&mdx, &mdy);
-
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplSDL2_NewFrame(window);
-        ImGui::NewFrame();
 
         input.update();
 
@@ -249,6 +247,7 @@ int main(int argc, char* argv[]) {
             lastTicks = ticks;
 
             dt = (f32)diff / 1000000000.f;
+            time += dt;
 
             ++framesInSecond;
             frameTicks += diff;
@@ -256,103 +255,10 @@ int main(int argc, char* argv[]) {
                 frameTicks -= 1000000000;
                 fps = framesInSecond;
                 framesInSecond = 0;
-                std::cout << "FPS: " << fps << std::endl;
             }
         }
 
-        // UI
-        {
-            ImGui::Begin("Camera");
-
-            ImGui::InputFloat("theta", &cam.theta);
-            ImGui::InputFloat("phi", &cam.phi);
-            ImGui::InputFloat("rho", &cam.rho);
-
-            ImGui::InputFloat3("position", &cam.target[0], 2);
-
-            ImGui::SliderInt("selected", &selectedIndex, -1, AGENT_COUNT - 1);
-
-            ImGui::End();
-        }
-        {
-            ImGui::Begin("Agents");
-
-            ImGui::Text("Seek Mode: ");
-            ImGui::SameLine();
-
-            int seekModeIndex = (int)agentConfig.seekMode;
-            if (ImGui::Button(seek_mode_strs[seekModeIndex])) {
-                seekModeIndex++;
-                if (seekModeIndex >= (int)agent_seek_mode::kCount) {
-                    seekModeIndex = 0;
-                }
-                agentConfig.seekMode = (agent_seek_mode)seekModeIndex;
-            }
-
-            /*f32 maxSpeed = 10.f;
-            f32 maxAccel = 5.f;
-            f32 projectionDist = 4.f;
-            f32 projectionRadius = 1.f;
-            f32 wanderMult = 10.f;
-            f32 wanderInterval = 1 / 60.f;*/
-
-            ImGui::InputFloat("Max Speed", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Max Acceleration", &agentConfig.maxAccel, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Separation Dist", &agentConfig.separationDist, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Path Distance", &agentConfig.pathFollowDist, 0.1f, 1.f, 2);
-
-            ImGui::Separator();
-
-            ImGui::SliderFloat("Movement Scalar", &agentConfig.movementScalar, 0.f, 1.f);
-            ImGui::SliderFloat("Flow Scalar", &agentConfig.flowScalar, 0.f, 1.f);
-            ImGui::SliderFloat("Separation Scalar", &agentConfig.separationScalar, 0.f, 1.f);
-
-            ImGui::Separator();
-
-            ImGui::InputFloat("Wander Proj Dist", &agentConfig.wanderProjectionDist, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Wander Proj Radius", &agentConfig.wanderProjectionRadius, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Wonder Angle Range", &agentConfig.wanderAngleRange, 0.1f, 1.f, 2);
-
-            int ms = (int)(agentConfig.wanderInterval * 1000.f);
-            ImGui::InputInt("Wonder Drift Interval (ms)", &ms);
-            agentConfig.wanderInterval = ms / 1000.f;
-
-            ImGui::End();
-        }
-        {
-            ImGui::Begin("World");
-
-            ImGui::InputFloat("Flow Divisor", &world.flowDivisor, 0.1f, 1.f, 2);
-            ImGui::InputFloat("Flow Depth", &world.flowDepth, 0.1f, 1.f, 2);
-
-
-            ImGui::End();
-        }
-        {
-            ImGui::Begin("Debug");
-
-            ImGui::Checkbox("Wander Projection", &debugConfig.showWanderProjection);
-            ImGui::Checkbox("Target", &debugConfig.showTarget);
-            ImGui::Checkbox("Separation Radius", &debugConfig.showSeparationRadius);
-            ImGui::Checkbox("Path", &debugConfig.showPath);
-            ImGui::Checkbox("Flow Field", &debugConfig.showFlowField);
-
-            ImGui::End();
-        }
-        {
-            ImGui::Begin("Stats");
-            
-            ImGui::Text("FPS: %d", fps);
-
-            glm::vec3 origin, dir;
-            cam.get_screen_ray(mousePoint, origin, dir);
-            ImGui::InputFloat3("Origin", &origin[0], 4);
-            ImGui::InputFloat3("Direction", &dir[0], 4);
-            ImGui::InputFloat3("Position", &cam.position()[0], 4);
-            ImGui::InputFloat2("Mouse Pos", &mousePoint.x, 2);
-
-            ImGui::End();
-        }
+        
 
         // UPDATE
         {
@@ -398,34 +304,27 @@ int main(int argc, char* argv[]) {
                 else {
                     SDL_SetRelativeMouseMode(SDL_FALSE);
                 }
-            }
 
-            {
-                auto agent = agents[0];
-                vec2 pos = agent.body->GetPosition();
-                f32 rot = agent.body->GetAngle();
+                vec2 moveRectAmount;
 
                 if (input.get_key(SDL_SCANCODE_LEFT)) {
-                    pos.x -= 10.f * dt;
+                    moveRectAmount.x -= 10.f * dt;
                 }
 
                 if (input.get_key(SDL_SCANCODE_RIGHT)) {
-                    pos.x += 10.f * dt;
+                    moveRectAmount.x += 10.f * dt;
                 }
 
                 if (input.get_key(SDL_SCANCODE_UP)) {
-                    pos.y -= 10.f * dt;
+                    moveRectAmount.y -= 10.f * dt;
                 }
 
                 if (input.get_key(SDL_SCANCODE_DOWN)) {
-                    pos.y += 10.f * dt;
+                    moveRectAmount.y += 10.f * dt;
                 }
 
-                agents[0].body->SetTransform(pos, rot);
+                moveRect.move(moveRectAmount);
             }
-
-            a += 0.1f * dt;
-
 
             for (auto& agent : agents) {
                 agent.position = agent.body->GetPosition();
@@ -543,6 +442,107 @@ int main(int argc, char* argv[]) {
             physicsWorld.Step(dt, velocityIterations, positionIterations);
         }
 
+        // UI
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplSDL2_NewFrame(window);
+        ImGui::NewFrame();
+
+        {
+            ImGui::Begin("Camera");
+
+            ImGui::InputFloat("theta", &cam.theta);
+            ImGui::InputFloat("phi", &cam.phi);
+            ImGui::InputFloat("rho", &cam.rho);
+
+            ImGui::InputFloat3("position", &cam.target[0], 2);
+
+            ImGui::SliderInt("selected", &selectedIndex, -1, AGENT_COUNT - 1);
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("Agents");
+
+            ImGui::Text("Seek Mode: ");
+            ImGui::SameLine();
+
+            int seekModeIndex = (int)agentConfig.seekMode;
+            if (ImGui::Button(seek_mode_strs[seekModeIndex])) {
+                seekModeIndex++;
+                if (seekModeIndex >= (int)agent_seek_mode::kCount) {
+                    seekModeIndex = 0;
+                }
+                agentConfig.seekMode = (agent_seek_mode)seekModeIndex;
+            }
+
+            /*f32 maxSpeed = 10.f;
+            f32 maxAccel = 5.f;
+            f32 projectionDist = 4.f;
+            f32 projectionRadius = 1.f;
+            f32 wanderMult = 10.f;
+            f32 wanderInterval = 1 / 60.f;*/
+
+            ImGui::InputFloat("Max Speed", &agentConfig.maxSpeed, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Max Acceleration", &agentConfig.maxAccel, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Separation Dist", &agentConfig.separationDist, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Path Distance", &agentConfig.pathFollowDist, 0.1f, 1.f, 2);
+
+            ImGui::Separator();
+
+            ImGui::SliderFloat("Movement Scalar", &agentConfig.movementScalar, 0.f, 1.f);
+            ImGui::SliderFloat("Flow Scalar", &agentConfig.flowScalar, 0.f, 1.f);
+            ImGui::SliderFloat("Separation Scalar", &agentConfig.separationScalar, 0.f, 1.f);
+
+            ImGui::Separator();
+
+            ImGui::InputFloat("Wander Proj Dist", &agentConfig.wanderProjectionDist, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Wander Proj Radius", &agentConfig.wanderProjectionRadius, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Wonder Angle Range", &agentConfig.wanderAngleRange, 0.1f, 1.f, 2);
+
+            int ms = (int)(agentConfig.wanderInterval * 1000.f);
+            ImGui::InputInt("Wonder Drift Interval (ms)", &ms);
+            agentConfig.wanderInterval = ms / 1000.f;
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("World");
+
+            ImGui::InputFloat("Flow Divisor", &world.flowDivisor, 0.1f, 1.f, 2);
+            ImGui::InputFloat("Flow Depth", &world.flowDepth, 0.1f, 1.f, 2);
+
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("Debug");
+
+            ImGui::Checkbox("Wander Projection", &debugConfig.showWanderProjection);
+            ImGui::Checkbox("Target", &debugConfig.showTarget);
+            ImGui::Checkbox("Separation Radius", &debugConfig.showSeparationRadius);
+            ImGui::Checkbox("Path", &debugConfig.showPath);
+            ImGui::Checkbox("Flow Field", &debugConfig.showFlowField);
+
+            ImGui::End();
+        }
+        {
+            ImGui::Begin("Stats");
+
+            ImGui::Text("FPS: %d", fps);
+
+            glm::vec3 origin, dir;
+            cam.get_screen_ray(mousePoint, origin, dir);
+            ImGui::InputFloat3("Origin", &origin[0], 4);
+            ImGui::InputFloat3("Direction", &dir[0], 4);
+            ImGui::InputFloat3("Position", &cam.position()[0], 4);
+            ImGui::InputFloat2("Mouse Pos", &mousePoint.x, 2);
+            ImGui::Text("dist: %.2f", aabb::distance(baseRect, moveRect));
+            ImGui::Text("%.2f, %.2f, %.2f, %.2f", baseRect.left(), baseRect.right(), baseRect.top(), baseRect.bottom());
+            ImGui::Text("%.2f, %.2f, %.2f, %.2f", moveRect.left(), moveRect.right(), moveRect.top(), moveRect.bottom());
+
+            ImGui::End();
+        }
+
         // RENDER
         {
             // origin handle
@@ -636,6 +636,11 @@ int main(int argc, char* argv[]) {
                 vec2 ground = ray_ground_intersection(cam.position(), dir);
                 draw.set_color_bytes(0, 255, 255);
                 draw.circle(ground, 0.5f);
+
+                draw.set_color_bytes(255, 0, 255);
+                draw_aabb(draw, baseRect);
+                draw.set_color_bytes(127, 0, 127);
+                draw_aabb(draw, moveRect);
             }
 
             ImGui::Render();
@@ -672,4 +677,13 @@ vec2 ray_ground_intersection(const glm::vec3& origin, const glm::vec3& direction
         }
     }
     return vec2(0, 0);
+}
+
+void draw_aabb(flat_draw_context& ctx, const aabb& box) {
+    auto topLeft = vec2(box.left(), box.top());
+    auto botRight = vec2(box.right(), box.bottom());
+    ctx.line(box.botLeft,  topLeft);
+    ctx.line(topLeft,  box.topRight);
+    ctx.line(box.topRight, botRight);
+    ctx.line(botRight, box.botLeft);
 }

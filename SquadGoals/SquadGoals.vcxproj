@@ -191,6 +191,7 @@
     <ClInclude Include="input_state.h" />
     <ClInclude Include="path.h" />
     <ClInclude Include="perlin.h" />
+    <ClInclude Include="quadtree.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>

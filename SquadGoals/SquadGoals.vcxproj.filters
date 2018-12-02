@@ -128,5 +128,8 @@
     <ClInclude Include="imgui_impl_sdl.h">
       <Filter>imgui\renderer</Filter>
     </ClInclude>
+    <ClInclude Include="quadtree.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
