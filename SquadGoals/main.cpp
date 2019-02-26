@@ -378,7 +378,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 // SEPARATE
-                vec2 separation = [&agent, &agents, &agentConfig]() -> vec2 {
+                const vec2 separation = [&agent, &agents, &agentConfig]() -> vec2 {
                     vec2 sum = vec2::ZERO;
                     int count = 0;
                     for (auto& other : agents) {
@@ -510,7 +510,6 @@ int main(int argc, char* argv[]) {
 
             ImGui::InputFloat("Flow Divisor", &world.flowDivisor, 0.1f, 1.f, 2);
             ImGui::InputFloat("Flow Depth", &world.flowDepth, 0.1f, 1.f, 2);
-
 
             ImGui::End();
         }
