@@ -180,7 +180,6 @@
     <ClInclude Include="algebra.h" />
     <ClInclude Include="box2dSdlDebugDraw.h" />
     <ClInclude Include="camera.h" />
-    <ClInclude Include="ecs.h" />
     <ClInclude Include="flatdraw.h" />
     <ClInclude Include="flowfield.h" />
     <ClInclude Include="imconfig.h" />
